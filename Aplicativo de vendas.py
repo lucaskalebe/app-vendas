@@ -63,8 +63,7 @@ st.markdown(
     </style>
 
     <div class="logo-texto">
-        <img src="data:image/png;base64,{logo_base64}" width="220">
-        <h1 style="margin-top: 12px;">Gestão de Vendas | Meira Nobre</h1>
+        <h1>Gestão de Vendas | Meira Nobre</h1>
     </div>
     """,
     unsafe_allow_html=True
@@ -204,6 +203,7 @@ with tabs[3]:
                     st.error("Usuário já existe.")
     st.divider()
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
 
