@@ -59,34 +59,25 @@ if "user" not in st.session_state:
     st.stop()
 
 # ================= 4. UI CABEÇALHO (ALINHADO) =================
-col_logo, col_titulo = st.columns([1, 3]) 
+st.markdown(
+    """
+    <style>
+        .logo-texto {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 20px;
+        }
+    </style>
 
-with col_logo:
-    try:
-        st.image(LOGOMN_PATH, width=300) 
-    except:
-        st.write("📊")
-
-with col_titulo:
-    st.markdown(
-        """
-        <style>
-            .alinhado {
-                display: flex;
-                align-items: center;
-                height: 100%;
-            }
-        </style>
-
-        <div class="alinhado">
-            <h1 style="margin: 0;">Gestão de Vendas | Meira Nobre</h1>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-# DEFINIÇÃO DAS ABAS (Importante estar antes do uso)
-tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
+    <div class="logo-texto">
+        <img src="data:image/png;base64,{logo_base64}" width="220">
+        <h1 style="margin-top: 12px;">Gestão de Vendas | Meira Nobre</h1>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 # ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
@@ -214,4 +205,5 @@ with tabs[3]:
                     st.error("Usuário já existe.")
     st.divider()
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
