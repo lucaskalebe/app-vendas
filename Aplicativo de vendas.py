@@ -5,7 +5,7 @@ from datetime import datetime
 from io import BytesIO
 
 # ================= CONFIG =================
-st.set_page_config("Gestão Meira Nobre", layout="wide")
+st.set_page_config("Gestão de Vendas | Meira Nobre", layout="wide")
 DB = "vendas.db"
 
 # ================= DB =================
@@ -200,4 +200,5 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
