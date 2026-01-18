@@ -7,22 +7,24 @@ from datetime import datetime
 from io import BytesIO
 
 # ================= 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA LINHA) =================
+# No Streamlit Cloud, use apenas o nome do arquivo que está no seu GitHub
 LOGOMN_PATH = "logomn.png" 
 
 st.set_page_config(
     page_title="Gestão de Vendas | Meira Nobre",
-    page_icon=LOGOMN_PATH, # Se o ícone der erro, você pode usar um emoji como "📊" temporariamente
-    layout="wide"
-st.set_page_config(
-    page_title="Gestão de Vendas | Meira Nobre",
-    page_icon=LOGOMN_PATH,
+    page_icon="📊", # Usei um emoji aqui para garantir que não dê erro na aba
     layout="wide"
 )
 
-DB = "vendas.db"
+# Sidebar com o Logo (Protegido para não travar o app)
+with st.sidebar:
+    try:
+        st.image(LOGOMN_PATH, use_container_width=True)
+    except:
+        st.warning("⚠️ Arquivo 'logomn.png' não encontrado no repositório.")
+    st.divider()
 
-# Sidebar com o Logo
-st.sidebar.image(LOGOMN_PATH, use_container_width=True)
+DB = "vendas.db"
 
 # ================= 2. BANCO DE DADOS =================
 def run_db(query, params=(), select=False):
@@ -61,9 +63,11 @@ if "user" not in st.session_state:
 
 # ================= 4. UI CABEÇALHO =================
 col1, col2 = st.columns([1, 5]) 
-
 with col1:
-    st.image(LOGOMN_PATH, width=100) 
+    try:
+        st.image(LOGOMN_PATH, width=100)
+    except:
+        st.write("📊")
 
 with col2:
     st.title("Gestão de Vendas | Meira Nobre")
@@ -77,7 +81,7 @@ with tabs[0]:
 
     st.subheader("💰 Indicadores de Vendas")
     if not dfv.empty:
-        # Conversão segura para cálculos
+        # Conversão segura
         for col in ["valor_total", "comissao", "valor_unit"]:
             if dfv[col].dtype == object:
                 dfv[col] = dfv[col].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -91,7 +95,7 @@ with tabs[0]:
         c3.metric("Pedidos", len(dfv))
         c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
-        # --- BOTÃO EXPORTAR EXCEL ---
+        # Exportar para Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             dfv.to_excel(writer, index=False, sheet_name='Vendas')
@@ -99,7 +103,7 @@ with tabs[0]:
         st.download_button(
             label="📥 Baixar Relatório em Excel",
             data=output.getvalue(),
-            file_name=f"relatorio_vendas_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
+            file_name=f"vendas_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
@@ -113,16 +117,6 @@ with tabs[0]:
             st.bar_chart(dfv.groupby("segmento")["valor_total"].sum())
     else:
         st.info("Nenhuma venda registrada.")
-
-    st.divider()
-    st.subheader("👥 Resumo de Clientes")
-    if not dfc.empty:
-        col1_res, col2_res = st.columns(2)
-        col1_res.metric("Total de Clientes", len(dfc))
-        with col2_res:
-            st.write("### Por Categoria")
-            st.bar_chart(dfc["categoria"].value_counts())
-
 # ================= NOVA VENDA (Aba 1) =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
@@ -203,4 +197,5 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
