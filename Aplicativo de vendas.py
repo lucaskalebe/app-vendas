@@ -78,7 +78,6 @@ st.title("📊 Sistema Meira Nobre")
 tabs = st.tabs([
     "📈 Dashboard",
     "➕ Nova Venda",
-    "📜 Histórico",
     "👤 Clientes",
     "👥 Usuários"
 ])
@@ -261,6 +260,7 @@ with tabs[4]:
     st.divider()
     st.subheader("📋 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
 
 
 
