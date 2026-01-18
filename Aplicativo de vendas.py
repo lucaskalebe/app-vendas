@@ -22,7 +22,6 @@ with st.sidebar:
         st.warning("⚠️ Envie 'logomn.png' para o GitHub.")
     st.divider()
 
-DB = "vendas.db"
 
 # ================= 2. BANCO DE DADOS =================
 def run_db(query, params=(), select=False):
@@ -214,6 +213,7 @@ with tabs[3]:
                     st.error("Usuário já existe.")
     st.divider()
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
 
