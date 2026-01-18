@@ -9,7 +9,6 @@ from datetime import datetime
 # ================== CONFIGURAÇÕES E ESTILO ==================
 st.set_page_config(page_title="Gestão Meira Nobre", layout="wide")
 
-# CSS para cores personalizadas no Dash de Clientes
 st.markdown("""
     <style>
     .segmento-box { background-color: #1e293b; padding: 15px; border-radius: 10px; border-left: 5px solid #8b5cf6; }
@@ -25,7 +24,7 @@ def get_data(query):
 
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
-        # Tabela de Vendas Atualizada com SEGMENTO
+        # Cria as tabelas se não existirem
         conn.execute("""
             CREATE TABLE IF NOT EXISTS vendas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,6 +38,14 @@ def init_db():
                 cnpj TEXT, razao_social TEXT, telefone TEXT, email TEXT, categoria TEXT
             )
         """)
+        
+        # MIGAÇÃO: Verifica se a coluna 'segmento' existe na tabela vendas
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(vendas)")
+        colunas = [col[1] for col in cursor.fetchall()]
+        if 'segmento' not in colunas:
+            cursor.execute("ALTER TABLE vendas ADD COLUMN segmento TEXT DEFAULT 'Outros'")
+            conn.commit()
 
 init_db()
 
@@ -53,7 +60,8 @@ if not st.session_state["autenticado"]:
         if senha == SENHA_MESTRE:
             st.session_state["autenticado"] = True
             st.rerun()
-        else: st.error("Incorreta")
+        else: 
+            st.error("Incorreta")
     st.stop()
 
 # ================== INTERFACE ==================
@@ -61,14 +69,15 @@ t_dash, t_venda, t_hist, t_cli, t_db_cli = st.tabs([
     "📈 Dashboards", "➕ Nova Venda", "📜 Histórico", "👤 Novo Cliente", "📁 Banco de Clientes"
 ])
 
-# --- 1. DASHBOARDS (VENDA + CLIENTES) ---
+# --- 1. DASHBOARDS ---
 with t_dash:
     df_v = get_data("SELECT * FROM vendas")
     df_c = get_data("SELECT * FROM clientes")
     
     st.subheader("📊 Performance de Vendas")
     if not df_v.empty:
-        df_v = df_v.dropna(subset=['empresa'])
+        # Garantir que valores nulos não quebrem o dashboard
+        df_v['segmento'] = df_v['segmento'].fillna('Não Definido')
         
         m1, m2, m3, m4 = st.columns(4)
         m1.metric("Faturamento", f"R$ {df_v['valor_total'].sum():,.2f}")
@@ -79,14 +88,17 @@ with t_dash:
         c1, c2 = st.columns(2)
         with c1:
             st.write("**Vendas por Representada (R$)**")
-            st.bar_chart(df_v.groupby("empresa")["valor_total"].sum())
+            chart_data1 = df_v.groupby("empresa")["valor_total"].sum()
+            st.bar_chart(chart_data1)
         with c2:
             st.write("**Volume de Produtos por Segmento**")
-            st.bar_chart(df_v.groupby("segmento")["qtd"].sum())
+            chart_data2 = df_v.groupby("segmento")["qtd"].sum()
+            st.bar_chart(chart_data2)
+    else:
+        st.info("Aguardando dados de vendas para gerar gráficos.")
     
     st.divider()
     
-    # --- DASH DE CLIENTES (COR DIFERENTE) ---
     st.subheader("🟣 Inteligência de Clientes")
     if not df_c.empty:
         col_c1, col_c2 = st.columns([1, 2])
@@ -98,12 +110,12 @@ with t_dash:
             st.markdown('</div>', unsafe_allow_html=True)
         with col_c2:
             st.write("**Distribuição por Tipo de Loja**")
-            # Gráfico de área ou barras horizontais para clientes
-            st.bar_chart(df_c.groupby("categoria").size())
+            chart_data3 = df_c.groupby("categoria").size()
+            st.bar_chart(chart_data3)
     else:
-        st.info("Nenhum cliente cadastrado para análise.")
+        st.info("Nenhum cliente cadastrado.")
 
-# --- 2. NOVA VENDA (COM SEGMENTO) ---
+# --- 2. NOVA VENDA ---
 with t_venda:
     with st.container(border=True):
         st.subheader("📝 Registrar Pedido")
@@ -116,29 +128,34 @@ with t_venda:
         
         col1, col2, col3 = st.columns(3)
         q = col1.number_input("Qtd", min_value=1, value=1)
-        v = col2.number_input("Preço Unit.", min_value=0.0)
+        v = col2.number_input("Preço Unit.", min_value=0.0, format="%.2f")
         p = col3.number_input("Comissão %", value=10)
         
         total = q * v
         comis = total * (p/100)
         
         if st.button("🚀 Salvar Venda"):
-            dt = datetime.now().strftime("%d/%m/%Y %H:%M")
-            with sqlite3.connect(DB_NAME) as conn:
-                conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, segmento, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?,?)",
-                             (dt, emp, cli, prod, seg, q, v, total, comis))
-            st.success("Salvo!")
-            st.rerun()
+            if emp and cli:
+                dt = datetime.now().strftime("%d/%m/%Y %H:%M")
+                with sqlite3.connect(DB_NAME) as conn:
+                    conn.execute("""
+                        INSERT INTO vendas (data, empresa, cliente, produto, segmento, qtd, valor_unit, valor_total, comissao) 
+                        VALUES (?,?,?,?,?,?,?,?,?)
+                    """, (dt, emp, cli, prod, seg, q, v, total, comis))
+                st.success("Venda salva com sucesso!")
+                st.rerun()
+            else:
+                st.error("Preencha a Representada e o Cliente.")
 
 # --- 3. HISTÓRICO ---
 with t_hist:
     df_h = get_data("SELECT * FROM vendas ORDER BY id DESC")
-    edited = st.data_editor(df_h, use_container_width=True, num_rows="dynamic")
-    if st.button("💾 Sincronizar Tudo"):
+    edited = st.data_editor(df_h, use_container_width=True, num_rows="dynamic", key="editor_vendas")
+    if st.button("💾 Sincronizar Histórico"):
         with sqlite3.connect(DB_NAME) as conn:
             conn.execute("DELETE FROM vendas")
             edited.to_sql("vendas", conn, if_exists="append", index=False)
-            conn.execute("VACUUM")
+        st.success("Dados sincronizados!")
         st.rerun()
 
 # --- 4. CADASTRO CLIENTE ---
@@ -150,11 +167,14 @@ with t_cli:
         cj = c2.text_input("CNPJ")
         cat = st.selectbox("Tipo de Loja", ["Varejo", "Atacado", "Supermercado", "Boutique"])
         if st.form_submit_button("Salvar Cliente"):
-            with sqlite3.connect(DB_NAME) as conn:
-                conn.execute("INSERT INTO clientes (cnpj, razao_social, categoria) VALUES (?,?,?)", (cj, rs, cat))
-            st.success("Cliente na base!")
+            if rs:
+                with sqlite3.connect(DB_NAME) as conn:
+                    conn.execute("INSERT INTO clientes (cnpj, razao_social, categoria) VALUES (?,?,?)", (cj, rs, cat))
+                st.success("Cliente cadastrado!")
+            else:
+                st.error("Razão Social é obrigatória.")
 
 # --- 5. BANCO DE CLIENTES ---
 with t_db_cli:
     df_clients = get_data("SELECT * FROM clientes")
-    st.data_editor(df_clients, use_container_width=True, num_rows="dynamic")
+    st.data_editor(df_clients, use_container_width=True, num_rows="dynamic", key="editor_clientes")
