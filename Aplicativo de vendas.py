@@ -243,7 +243,7 @@ with tabs[3]:
         st.success("Cliente salvo")
 
 # ================= USUÁRIOS =================
-with tabs[3]:
+with tabs[4]:
     st.subheader("➕ Novo Usuário")
     u = st.text_input("Usuário novo")
     s = st.text_input("Senha nova", type="password")
@@ -261,6 +261,7 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
 
 
 
