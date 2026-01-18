@@ -1,5 +1,3 @@
-
-
 import sqlite3
 import pandas as pd
 import streamlit as st
@@ -32,16 +30,24 @@ def init_db():
     )""")
 
     run_db("""
-    CREATE TABLE IF NOT EXISTS vendas (
+    CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data TEXT, empresa TEXT, cliente TEXT, produto TEXT,
-        qtd INTEGER, valor_unit REAL, valor_total REAL, comissao REAL
+        razao_social TEXT,
+        cnpj TEXT,
+        categoria TEXT
     )""")
 
     run_db("""
-    CREATE TABLE IF NOT EXISTS clientes (
+    CREATE TABLE IF NOT EXISTS vendas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        razao_social TEXT, cnpj TEXT, categoria TEXT
+        data TEXT,
+        empresa TEXT,
+        cliente TEXT,
+        produto TEXT,
+        qtd INTEGER,
+        valor_unit REAL,
+        valor_total REAL,
+        comissao REAL
     )""")
 
     if run_db("SELECT * FROM usuarios", select=True).empty:
@@ -82,9 +88,8 @@ tabs = st.tabs([
     "👥 Usuários"
 ])
 
-# ================= DASH =================
+# ================= DASHBOARD =================
 with tabs[0]:
-
     dfv = run_db("SELECT * FROM vendas", select=True)
 
     if not dfv.empty:
@@ -92,11 +97,11 @@ with tabs[0]:
             pd.to_numeric, errors="coerce"
         ).fillna(0)
 
-        a, b, c, d = st.columns(4)
-        a.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
-        b.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
-        c.metric("Pedidos", len(dfv))
-        d.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
+        c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
+        c3.metric("Pedidos", len(dfv))
+        c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
         st.divider()
 
@@ -143,15 +148,22 @@ with tabs[0]:
                     mime="application/pdf",
                     use_container_width=True
                 )
+    else:
+        st.info("Nenhuma venda registrada ainda")
 
-# ================= NOVA VENDA =================
 # ================= NOVA VENDA =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
 
+    clientes = run_db("SELECT razao_social FROM clientes", select=True)
+
     c1, c2 = st.columns(2)
     emp = c1.text_input("Empresa")
-    cli = c2.text_input("Cliente")
+    cli = c2.selectbox(
+        "Cliente",
+        clientes["razao_social"] if not clientes.empty else []
+    )
+
     prod = st.text_input("Produto")
 
     q1, q2, q3 = st.columns(3)
@@ -164,16 +176,19 @@ with tabs[1]:
 
     if st.button("🚀 Salvar Venda", use_container_width=True):
         if emp and cli and prc > 0:
-            run_db(
-                "INSERT INTO vendas VALUES (NULL,?,?,?,?,?,?,?,?)",
-                (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, comissao)
-            )
+            run_db("""
+                INSERT INTO vendas
+                (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                datetime.now().strftime("%d/%m/%Y"),
+                emp, cli, prod, qtd, prc, total, comissao
+            ))
             st.success("Venda registrada")
             st.rerun()
         else:
-            st.warning("Preencha os campos obrigatórios")
+            st.warning("Preencha todos os campos obrigatórios")
 
-    # --------- BASE DE VENDAS ----------
     st.divider()
     st.subheader("📜 Pedidos Registrados")
 
@@ -182,10 +197,9 @@ with tabs[1]:
     if not dfv.empty:
         edit = st.data_editor(
             dfv,
-            num_rows="dynamic",
             hide_index=True,
             use_container_width=True,
-            key="vendas_editor"
+            num_rows="dynamic"
         )
 
         if st.button("💾 Sincronizar Pedidos"):
@@ -195,12 +209,10 @@ with tabs[1]:
             st.success("Pedidos atualizados")
             st.rerun()
     else:
-        st.info("Nenhuma venda registrada ainda")
-
-
+        st.info("Nenhuma venda cadastrada")
 
 # ================= CLIENTES =================
-with tabs[3]:
+with tabs[2]:
     st.subheader("👤 Cadastro de Cliente")
 
     c1, c2 = st.columns(2)
@@ -211,7 +223,7 @@ with tabs[3]:
 
     if st.button("Salvar Cliente"):
         run_db(
-            "INSERT INTO clientes VALUES (NULL,?,?,?)",
+            "INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)",
             (rs, cj, cat)
         )
         st.success("Cliente cadastrado")
@@ -225,10 +237,9 @@ with tabs[3]:
     if not dfc.empty:
         edit = st.data_editor(
             dfc,
-            num_rows="dynamic",
             hide_index=True,
             use_container_width=True,
-            key="clientes_editor"
+            num_rows="dynamic"
         )
 
         if st.button("💾 Sincronizar Clientes"):
@@ -240,11 +251,10 @@ with tabs[3]:
     else:
         st.info("Nenhum cliente cadastrado")
 
-        st.success("Cliente salvo")
-
 # ================= USUÁRIOS =================
-with tabs[4]:
+with tabs[3]:
     st.subheader("➕ Novo Usuário")
+
     u = st.text_input("Usuário novo")
     s = st.text_input("Senha nova", type="password")
 
@@ -259,12 +269,5 @@ with tabs[4]:
             st.error("Usuário já existe")
 
     st.divider()
-    st.subheader("📋 Usuários")
+    st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
-
-
-
-
-
-
-
