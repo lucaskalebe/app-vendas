@@ -62,7 +62,7 @@ if "user" not in st.session_state:
 col1, col2 = st.columns([1, 3]) 
 with col1:
     try:
-        st.image(LOGOMN_PATH, width=100)
+        st.image(LOGOMN_PATH, width=350)
     except:
         st.write("📊")
 
@@ -208,4 +208,5 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
