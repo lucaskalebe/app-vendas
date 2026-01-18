@@ -47,15 +47,14 @@ if "user" not in st.session_state:
 st.title("📊 Sistema Meira Nobre")
 tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
 
-# ================= DASHBOARD =================
+# ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
     dfv = run_db("SELECT * FROM vendas", select=True)
     dfc = run_db("SELECT * FROM clientes", select=True)
 
-    # --- Seção de Vendas ---
     st.subheader("💰 Indicadores de Vendas")
     if not dfv.empty:
-        # CORREÇÃO DO ERRO: Limpeza de strings R$ e conversão numérica
+        # Conversão segura para cálculos (limpando possíveis R$ vindos do editor)
         for col in ["valor_total", "comissao", "valor_unit"]:
             if dfv[col].dtype == object:
                 dfv[col] = dfv[col].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -78,25 +77,18 @@ with tabs[0]:
             st.write("### Faturamento por Segmento")
             st.bar_chart(dfv.groupby("segmento")["valor_total"].sum())
     else:
-        st.info("Aguardando registro de vendas.")
+        st.info("Nenhuma venda registrada.")
 
     st.divider()
-
-    # --- Seção de Clientes (DASHBOARD DE CLIENTES) ---
-    st.subheader("👥 Dashboard de Clientes")
+    st.subheader("👥 Resumo de Clientes")
     if not dfc.empty:
-        k1, k2 = st.columns([1, 2])
-        with k1:
-            st.metric("Total de Clientes", len(dfc))
+        col1, col2 = st.columns(2)
+        col1.metric("Total de Clientes", len(dfc))
+        with col2:
             st.write("### Por Categoria")
             st.bar_chart(dfc["categoria"].value_counts())
-        with k2:
-            st.write("### Clientes Cadastrados")
-            st.dataframe(dfc[["razao_social", "cnpj", "categoria"]], hide_index=True, use_container_width=True)
-    else:
-        st.info("Nenhum cliente cadastrado ainda.")
 
-# ================= NOVA VENDA =================
+# ================= NOVA VENDA (Aba 1) =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
     clientes_sel = run_db("SELECT razao_social FROM clientes", select=True)
@@ -106,29 +98,30 @@ with tabs[1]:
         emp = c1.text_input("Empresa")
         cli = c2.selectbox("Cliente", clientes_sel["razao_social"] if not clientes_sel.empty else ["Cadastre um cliente"])
         prod = st.text_input("Produto")
-        seg = st.selectbox("Segmento", ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação"])
+        seg = st.selectbox("Segmento", ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação", "Outros"])
         
         q1, q2, q3 = st.columns(3)
-        qtd = q1.number_input("Qtd", min_value=1)
+        qtd = q1.number_input("Qtd", min_value=1, value=1)
         prc = q2.number_input("Preço Unit", min_value=0.0)
         com = q3.number_input("Comissão %", value=10)
         
         if st.form_submit_button("🚀 Salvar Venda"):
-            total = qtd * prc
-            v_com = total * (com / 100)
-            run_db("""INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento) 
-                   VALUES (?,?,?,?,?,?,?,?,?)""",
-                   (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_com, seg))
-            st.success("Venda registrada!")
-            st.rerun()
+            if cli != "Cadastre um cliente" and emp:
+                total = qtd * prc
+                v_com = total * (com / 100)
+                run_db("""INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento) 
+                       VALUES (?,?,?,?,?,?,?,?,?)""",
+                       (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_com, seg))
+                st.success("Venda registrada!")
+                st.rerun()
 
     st.divider()
     dfv_list = run_db("SELECT * FROM vendas", select=True)
     if not dfv_list.empty:
-        st.write("### Pedidos Registrados")
+        st.write("### Histórico de Pedidos")
         st.data_editor(dfv_list, hide_index=True, use_container_width=True)
 
-# ================= CLIENTES =================
+# ================= CLIENTES (Aba 2) =================
 with tabs[2]:
     st.subheader("👤 Cadastro de Cliente")
     with st.form("cli_form"):
@@ -136,10 +129,39 @@ with tabs[2]:
         cj = st.text_input("CNPJ")
         ct = st.selectbox("Categoria", ["Varejo", "Atacado", "Supermercado", "Outros"])
         if st.form_submit_button("Salvar Cliente"):
-            run_db("INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)", (rs, cj, ct))
+            if rs:
+                run_db("INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)", (rs, cj, ct))
+                st.success("Cliente cadastrado!")
+                st.rerun()
+
+    st.divider()
+    st.subheader("📁 Tabela Geral de Clientes")
+    df_c_edit = run_db("SELECT * FROM clientes", select=True)
+    if not df_c_edit.empty:
+        new_dfc = st.data_editor(df_c_edit, hide_index=True, use_container_width=True, num_rows="dynamic")
+        if st.button("💾 Sincronizar Clientes"):
+            with sqlite3.connect(DB) as conn:
+                conn.execute("DELETE FROM clientes")
+                new_dfc.to_sql("clientes", conn, index=False, if_exists="append")
+            st.success("Sincronizado!")
             st.rerun()
 
-# ================= USUÁRIOS =================
+# ================= USUÁRIOS (Aba 3) =================
 with tabs[3]:
-    st.subheader("👥 Usuários")
+    st.subheader("➕ Incluir Novo Usuário")
+    with st.form("new_user_form"):
+        new_u = st.text_input("Nome do Usuário")
+        new_s = st.text_input("Senha", type="password")
+        if st.form_submit_button("Criar Usuário"):
+            if new_u and new_s:
+                try:
+                    run_db("INSERT INTO usuarios (usuario, senha) VALUES (?,?)", (new_u, new_s))
+                    st.success(f"Usuário {new_u} criado com sucesso!")
+                except sqlite3.IntegrityError:
+                    st.error("Este usuário já existe.")
+            else:
+                st.warning("Preencha todos os campos.")
+
+    st.divider()
+    st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
