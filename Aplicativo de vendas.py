@@ -1,17 +1,26 @@
+
+
 import sqlite3
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 from io import BytesIO
 
-# ================= CONFIG =================
-st.set_page_config("Gestão de Vendas | Meira Nobre", layout="wide")
+# ================= 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA LINHA) =================
+LOGOMN_PATH = r"C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png"
+
+st.set_page_config(
+    page_title="Gestão de Vendas | Meira Nobre",
+    page_icon=LOGOMN_PATH,
+    layout="wide"
+)
+
 DB = "vendas.db"
 
-# Adicione isso logo após o st.set_page_config
-st.sidebar.image(r"C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png", use_container_width=True)
+# Sidebar com o Logo
+st.sidebar.image(LOGOMN_PATH, use_container_width=True)
 
-# ================= DB =================
+# ================= 2. BANCO DE DADOS =================
 def run_db(query, params=(), select=False):
     with sqlite3.connect(DB) as conn:
         if select:
@@ -32,7 +41,7 @@ def init_db():
 
 init_db()
 
-# ================= LOGIN =================
+# ================= 3. LOGIN =================
 if "user" not in st.session_state:
     st.title("🔐 Login")
     u = st.text_input("Usuário")
@@ -46,22 +55,16 @@ if "user" not in st.session_state:
             st.error("Usuário ou senha inválidos")
     st.stop()
 
-# ================= UI =================
-# Substitua a linha st.title("📊 Gestão de Vendas...") por:
-col1, col2 = st.columns([1, 5]) # Ajuste a proporção conforme o tamanho do seu logo
+# ================= 4. UI CABEÇALHO =================
+col1, col2 = st.columns([1, 5]) 
 
 with col1:
-    st.image("seu_logo.png", width=100) # Ajuste a largura (width)
+    st.image(LOGOMN_PATH, width=100) 
 
 with col2:
     st.title("Gestão de Vendas | Meira Nobre")
 
 tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
-
-st.set_page_config(
-    page_title="Gestão de Vendas | Meira Nobre",
-    page_icon=(r"C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png"),
-    layout="wide"
 
 # ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
@@ -70,7 +73,7 @@ with tabs[0]:
 
     st.subheader("💰 Indicadores de Vendas")
     if not dfv.empty:
-        # Conversão segura para cálculos (limpando possíveis R$ vindos do editor)
+        # Conversão segura para cálculos
         for col in ["valor_total", "comissao", "valor_unit"]:
             if dfv[col].dtype == object:
                 dfv[col] = dfv[col].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -83,6 +86,18 @@ with tabs[0]:
         c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
         c3.metric("Pedidos", len(dfv))
         c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
+
+        # --- BOTÃO EXPORTAR EXCEL ---
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            dfv.to_excel(writer, index=False, sheet_name='Vendas')
+        
+        st.download_button(
+            label="📥 Baixar Relatório em Excel",
+            data=output.getvalue(),
+            file_name=f"relatorio_vendas_{datetime.now().strftime('%d_%m_%Y')}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 
         st.divider()
         g1, g2 = st.columns(2)
@@ -98,30 +113,23 @@ with tabs[0]:
     st.divider()
     st.subheader("👥 Resumo de Clientes")
     if not dfc.empty:
-        col1, col2 = st.columns(2)
-        col1.metric("Total de Clientes", len(dfc))
-        with col2:
+        col1_res, col2_res = st.columns(2)
+        col1_res.metric("Total de Clientes", len(dfc))
+        with col2_res:
             st.write("### Por Categoria")
             st.bar_chart(dfc["categoria"].value_counts())
 
 # ================= NOVA VENDA (Aba 1) =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
-
     clientes_sel = run_db("SELECT razao_social FROM clientes", select=True)
 
     with st.form("venda_form"):
         c1, c2 = st.columns(2)
         emp = c1.text_input("Empresa")
-        cli = c2.selectbox(
-            "Cliente",
-            clientes_sel["razao_social"].tolist() if not clientes_sel.empty else ["Cadastre um cliente"]
-        )
+        cli = c2.selectbox("Cliente", clientes_sel["razao_social"].tolist() if not clientes_sel.empty else ["Cadastre um cliente"])
         prod = st.text_input("Produto")
-        seg = st.selectbox(
-            "Segmento",
-            ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação", "Outros"]
-        )
+        seg = st.selectbox("Segmento", ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação", "Outros"])
 
         q1, q2, q3 = st.columns(3)
         qtd = q1.number_input("Qtd", min_value=1, value=1)
@@ -132,45 +140,23 @@ with tabs[1]:
             if emp and cli != "Cadastre um cliente" and prc > 0:
                 total = qtd * prc
                 v_com = total * (com / 100)
-
-                run_db("""
-                    INSERT INTO vendas 
-                    (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
-                    VALUES (?,?,?,?,?,?,?,?,?)
-                """, (
-                    datetime.now().strftime("%d/%m/%Y"),
-                    emp, cli, prod, qtd, prc, total, v_com, seg
-                ))
-
+                run_db("""INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
+                          VALUES (?,?,?,?,?,?,?,?,?)""", 
+                       (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_com, seg))
                 st.success("Venda registrada!")
                 st.rerun()
-            else:
-                st.warning("Preencha os campos obrigatórios")
 
-    # ---------- TABELA EDITÁVEL DE VENDAS ----------
     st.divider()
     st.subheader("📜 Pedidos Registrados")
-
     dfv_edit = run_db("SELECT * FROM vendas", select=True)
-
     if not dfv_edit.empty:
-        new_dfv = st.data_editor(
-            dfv_edit,
-            hide_index=True,
-            use_container_width=True,
-            num_rows="dynamic",
-            key="vendas_editor"
-        )
-
+        new_dfv = st.data_editor(dfv_edit, hide_index=True, use_container_width=True, num_rows="dynamic", key="v_editor")
         if st.button("💾 Sincronizar Pedidos"):
             with sqlite3.connect(DB) as conn:
                 conn.execute("DELETE FROM vendas")
                 new_dfv.to_sql("vendas", conn, index=False, if_exists="append")
             st.success("Pedidos sincronizados!")
             st.rerun()
-    else:
-        st.info("Nenhuma venda registrada ainda")
-
 
 # ================= CLIENTES (Aba 2) =================
 with tabs[2]:
@@ -186,10 +172,9 @@ with tabs[2]:
                 st.rerun()
 
     st.divider()
-    st.subheader("📁 Tabela Geral de Clientes")
     df_c_edit = run_db("SELECT * FROM clientes", select=True)
     if not df_c_edit.empty:
-        new_dfc = st.data_editor(df_c_edit, hide_index=True, use_container_width=True, num_rows="dynamic")
+        new_dfc = st.data_editor(df_c_edit, hide_index=True, use_container_width=True, num_rows="dynamic", key="c_editor")
         if st.button("💾 Sincronizar Clientes"):
             with sqlite3.connect(DB) as conn:
                 conn.execute("DELETE FROM clientes")
@@ -207,16 +192,10 @@ with tabs[3]:
             if new_u and new_s:
                 try:
                     run_db("INSERT INTO usuarios (usuario, senha) VALUES (?,?)", (new_u, new_s))
-                    st.success(f"Usuário {new_u} criado com sucesso!")
-                except sqlite3.IntegrityError:
-                    st.error("Este usuário já existe.")
-            else:
-                st.warning("Preencha todos os campos.")
+                    st.success(f"Usuário {new_u} criado!")
+                except:
+                    st.error("Usuário já existe.")
 
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
-
-
-
-
