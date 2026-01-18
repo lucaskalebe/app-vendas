@@ -1,3 +1,5 @@
+
+
 import os
 import streamlit as st
 import pandas as pd
@@ -38,8 +40,7 @@ def init_db():
         conn.execute("""
             CREATE TABLE IF NOT EXISTS clientes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                cnpj TEXT, razao_social TEXT, nome_fantasia TEXT,
-                telefone TEXT, email TEXT, responsavel TEXT
+                cnpj TEXT, razao_social TEXT, telefone TEXT, email TEXT
             )
         """)
 
@@ -73,89 +74,74 @@ if check_password():
         else:
             st.info("Lance vendas para ativar o Dashboard.")
 
-    # --- 2. NOVA VENDA (VISUAL PREMIUM) ---
+    # --- 2. NOVA VENDA (VISUAL PREMIUM + CÁLCULO VOLTOU) ---
     with t_venda:
         with st.container(border=True):
             st.subheader("📝 Registrar Novo Pedido")
-            with st.form("f_venda", clear_on_submit=True):
-                emp = st.text_input("🏢 Empresa Representada")
-                cli = st.text_input("🏬 Cliente / Loja")
-                prod = st.text_input("📦 Descrição do Produto")
-                col1, col2, col3 = st.columns(3)
-                q = col1.number_input("🔢 Quantidade", min_value=1, value=1)
-                v = col2.number_input("💰 Preço Unitário (R$)", min_value=0.0, format="%.2f")
-                p = col3.number_input("📈 Comissão %", min_value=0, value=10)
-                
-                if st.form_submit_button("🚀 Salvar Venda"):
-                    if emp and cli and v > 0:
-                        total = q * v
-                        comis = total * (p / 100)
-                        dt = datetime.now().strftime("%d/%m/%Y %H:%M")
-                        with sqlite3.connect(DB_NAME) as conn:
-                            conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
-                                         (dt, emp, cli, prod, q, v, total, comis))
-                        st.success(f"✅ Venda de R$ {total:,.2f} registrada!")
-                        st.rerun()
+            # Fora do form para o cálculo ser em tempo real
+            emp = st.text_input("🏢 Empresa Representada")
+            cli = st.text_input("🏬 Cliente / Loja")
+            prod = st.text_input("📦 Descrição do Produto")
+            
+            c1, c2, c3 = st.columns(3)
+            q = c1.number_input("🔢 Quantidade", min_value=1, value=1)
+            v = c2.number_input("💰 Preço Unitário (R$)", min_value=0.0, format="%.2f")
+            p = c3.number_input("📈 Comissão %", min_value=0, value=10)
+            
+            # CÁLCULO AUTOMÁTICO NA TELA
+            total_calc = q * v
+            comis_calc = total_calc * (p / 100)
+            
+            st.info(f"✨ **Resumo:** Total R$ {total_calc:,.2f} | Comissão R$ {comis_calc:,.2f}")
+            
+            if st.button("🚀 Salvar Venda definitiva"):
+                if emp and cli and v > 0:
+                    dt = datetime.now().strftime("%d/%m/%Y %H:%M")
+                    with sqlite3.connect(DB_NAME) as conn:
+                        conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
+                                     (dt, emp, cli, prod, q, v, total_calc, comis_calc))
+                    st.success("✅ Venda salva no banco de dados!")
+                    st.rerun()
 
-    # --- 3. HISTÓRICO COM EDIÇÃO E EXCLUSÃO (UX MÁXIMO) ---
+    # --- 3. HISTÓRICO COM EDIÇÃO (ESTILO EXCEL) ---
     with t_hist_vendas:
         st.subheader("📜 Gestão de Pedidos")
-        st.info("💡 Clique em qualquer célula para editar ou use a lixeira à esquerda para excluir.")
-        
         with sqlite3.connect(DB_NAME) as conn:
             df_hist = pd.read_sql("SELECT * FROM vendas ORDER BY id DESC", conn)
         
-        # O Editor de Dados permite excluir e editar livremente
-        edited_df = st.data_editor(
-            df_hist, 
-            use_container_width=True, 
-            num_rows="dynamic", # Permite deletar linhas
-            hide_index=True,
-            column_config={
-                "id": st.column_config.NumberColumn("ID", disabled=True),
-                "valor_total": st.column_config.NumberColumn("Total R$", format="R$ %.2f"),
-                "comissao": st.column_config.NumberColumn("Comissão R$", format="R$ %.2f")
-            }
-        )
-
-        if st.button("💾 Confirmar Alterações / Exclusões"):
-            with sqlite3.connect(DB_NAME) as conn:
-                # Limpa a tabela e salva a nova versão editada
-                conn.execute("DELETE FROM vendas")
-                edited_df.to_sql("vendas", conn, if_exists="append", index=False)
-            st.success("✨ Banco de dados atualizado com sucesso!")
-            st.rerun()
+        if not df_hist.empty:
+            st.warning("⚠️ Se editar algo abaixo, não esqueça de clicar em 'Salvar Alterações'.")
+            # Editor tipo Excel
+            edited_df = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", hide_index=True)
+            
+            if st.button("💾 Salvar Alterações na Tabela"):
+                with sqlite3.connect(DB_NAME) as conn:
+                    conn.execute("DELETE FROM vendas")
+                    edited_df.to_sql("vendas", conn, if_exists="append", index=False)
+                st.success("✨ Alterações salvas!")
+                st.rerun()
+        else:
+            st.info("Nenhuma venda encontrada.")
 
     # --- 4. CADASTRO CLIENTE ---
     with t_cad_cliente:
         with st.container(border=True):
             st.subheader("👤 Cadastro de Novo Cliente")
-            with st.form("f_cli", clear_on_submit=True):
-                c1, c2 = st.columns(2)
-                cnpj = c1.text_input("CNPJ")
-                razao = c2.text_input("Razão Social")
-                tel = st.text_input("Telefone")
-                email = st.text_input("E-mail")
+            with st.form("f_cli"):
+                cn = st.text_input("CNPJ")
+                rs = st.text_input("Razão Social")
+                tl = st.text_input("Telefone")
+                em = st.text_input("E-mail")
                 if st.form_submit_button("💾 Salvar Cliente"):
-                    if razao:
+                    if rs:
                         with sqlite3.connect(DB_NAME) as conn:
                             conn.execute("INSERT INTO clientes (cnpj, razao_social, telefone, email) VALUES (?,?,?,?)",
-                                         (cnpj, razao, tel, email))
+                                         (cn, rs, tl, em))
                         st.success("✅ Cliente cadastrado!")
                         st.rerun()
 
-    # --- 5. BANCO DE DADOS CLIENTES (COM EDIÇÃO) ---
+    # --- 5. BANCO DE DADOS CLIENTES ---
     with t_db_cliente:
-        st.subheader("📁 Gerenciar Clientes")
         with sqlite3.connect(DB_NAME) as conn:
             df_c = pd.read_sql("SELECT * FROM clientes ORDER BY razao_social", conn)
-        
-        # Também permitindo editar clientes direto na tabela
-        edited_clients = st.data_editor(df_c, use_container_width=True, num_rows="dynamic", hide_index=True)
-        
-        if st.button("💾 Salvar Mudanças nos Clientes"):
-            with sqlite3.connect(DB_NAME) as conn:
-                conn.execute("DELETE FROM clientes")
-                edited_clients.to_sql("clientes", conn, if_exists="append", index=False)
-            st.success("✅ Lista de clientes atualizada!")
-            st.rerun()
+        st.data_editor(df_c, use_container_width=True, num_rows="dynamic", hide_index=True)
