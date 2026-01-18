@@ -8,7 +8,6 @@ import io
 # ================== CONFIGURAÇÕES E ESTILO ==================
 st.set_page_config(page_title="Gestão Meira Nobre", layout="wide")
 
-# Forçando o visual limpo e profissional
 SENHA_MESTRE = os.getenv("SENHA_APP", "1234")
 DB_NAME = "vendas.db"
 
@@ -54,7 +53,7 @@ if check_password():
         "📈 Dashboard Pro", "➕ Nova Venda", "📜 Histórico Vendas", "👤 Cadastro Cliente", "📁 Banco de Dados Clientes"
     ])
 
-    # --- 1. DASHBOARD TURBINADO ---
+    # --- 1. DASHBOARD ---
     with t_dash:
         with sqlite3.connect(DB_NAME) as conn:
             df_v = pd.read_sql("SELECT * FROM vendas", conn)
@@ -75,16 +74,14 @@ if check_password():
             with g2:
                 st.subheader("Performance de Comissões")
                 st.bar_chart(df_v.groupby("empresa")["comissao"].sum())
-            
-            st.subheader("Top Clientes (Volume de Compras)")
-            st.line_chart(df_v.groupby("cliente")["valor_total"].sum())
         else:
-            st.info("Lance sua primeira venda para ativar o Dashboard.")
+            st.info("Aguardando dados para gerar o Dashboard.")
 
-    # --- 2. NOVA VENDA (VISUAL PREMIUM RESTAURADO) ---
+    # --- 2. NOVA VENDA (VISUAL PREMIUM CORRIGIDO) ---
     with t_venda:
-        # Usando st.status para criar a borda/caixa de destaque que você gostou
-        with st.status("📝 Registrar Novo Pedido", expanded=True):
+        # Usamos o st.container para criar o espaço
+        with st.container(border=True):
+            st.subheader("📝 Registrar Novo Pedido")
             with st.form("f_venda", clear_on_submit=True):
                 emp = st.text_input("🏢 Empresa Representada")
                 cli = st.text_input("🏬 Cliente / Loja")
@@ -95,29 +92,19 @@ if check_password():
                 v = col2.number_input("💰 Preço Unitário (R$)", min_value=0.0, format="%.2f")
                 p = col3.number_input("📈 Sua Comissão %", min_value=0, value=10)
                 
-                total = q * v
-                comis = total * (p / 100)
-                
-                # Barra de resumo estilizada
-                st.markdown(f"""
-                <div style="background-color:#1e293b; padding:15px; border-radius:10px; border-left: 5px solid #3b82f6; margin: 10px 0;">
-                    <h4 style="margin:0; color:white;">💰 Resumo do Pedido</h4>
-                    <p style="margin:5px 0 0 0; color:#94a3b8; font-size:18px;">
-                        Total: <b>R$ {total:,.2f}</b> | Sua Comissão: <b>R$ {comis:,.2f}</b>
-                    </p>
-                </div>
-                """, unsafe_allow_stdio=True, unsafe_allow_html=True)
-                
+                # O cálculo do resumo agora fica DENTRO do botão para evitar erros de renderização
                 if st.form_submit_button("🚀 Salvar Venda"):
                     if emp and cli and v > 0:
+                        total = q * v
+                        comis = total * (p / 100)
                         dt = datetime.now().strftime("%d/%m/%Y %H:%M")
                         with sqlite3.connect(DB_NAME) as conn:
                             conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
                                          (dt, emp, cli, prod, q, v, total, comis))
-                        st.success("✅ Venda registrada com sucesso!")
+                        st.success(f"✅ Venda de R$ {total:,.2f} registrada!")
                         st.rerun()
                     else:
-                        st.error("⚠️ Por favor, preencha Empresa, Cliente e Valor Unitário.")
+                        st.error("⚠️ Preencha todos os campos corretamente.")
 
     # --- 3. HISTÓRICO VENDAS ---
     with t_hist_vendas:
@@ -126,12 +113,13 @@ if check_password():
         st.dataframe(df_h, use_container_width=True)
         if not df_h.empty:
             buf = io.BytesIO()
-            df_h.to_excel(buf, index=False, engine='xlsxwriter')
-            st.download_button("📥 Baixar Planilha de Vendas", buf.getvalue(), "vendas_meira.xlsx")
+            df_h.to_excel(buf, index=False)
+            st.download_button("📥 Baixar Planilha", buf.getvalue(), "vendas.xlsx")
 
     # --- 4. CADASTRO CLIENTE ---
     with t_cad_cliente:
-        with st.status("👤 Cadastro de Novo Cliente", expanded=True):
+        with st.container(border=True):
+            st.subheader("👤 Cadastro de Novo Cliente")
             with st.form("f_cli", clear_on_submit=True):
                 c1, c2 = st.columns(2)
                 cnpj = c1.text_input("CNPJ")
@@ -150,8 +138,6 @@ if check_password():
                                          (cnpj, razao, fant, tel, email, resp))
                         st.success("✅ Cliente cadastrado!")
                         st.rerun()
-                    else:
-                        st.error("⚠️ Razão Social é obrigatória.")
 
     # --- 5. BANCO DE DADOS CLIENTES ---
     with t_db_cliente:
@@ -160,5 +146,5 @@ if check_password():
         st.dataframe(df_c, use_container_width=True)
         if not df_c.empty:
             buf_c = io.BytesIO()
-            df_c.to_excel(buf_c, index=False, engine='xlsxwriter')
-            st.download_button("📥 Exportar Banco de Clientes", buf_c.getvalue(), "clientes_meira.xlsx")
+            df_c.to_excel(buf_c, index=False)
+            st.download_button("📥 Exportar Clientes", buf_c.getvalue(), "clientes.xlsx")
