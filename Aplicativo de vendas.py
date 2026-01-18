@@ -5,13 +5,14 @@ from datetime import datetime
 from io import BytesIO
 
 # ================= 1. CONFIGURAÇÃO (PRIMEIRA LINHA) =================
-LOGOMN_PATH = "logomn.png" 
+LOGOMN_PATH = "logomn.png"
 
 st.set_page_config(
     page_title="Gestão de Vendas | Meira Nobre",
-    page_icon="📊", 
+    page_icon="📊",
     layout="wide"
 )
+
 
 # Sidebar com o Logo
 with st.sidebar:
@@ -78,6 +79,14 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+# ================= 5. DEFINIÇÃO DAS ABAS (CORREÇÃO) =================
+tabs = st.tabs([
+    "📈 Dashboard",
+    "➕ Nova Venda",
+    "👤 Clientes",
+    "👥 Usuários"
+])
 
 # ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
@@ -205,5 +214,6 @@ with tabs[3]:
                     st.error("Usuário já existe.")
     st.divider()
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
