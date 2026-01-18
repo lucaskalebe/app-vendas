@@ -74,13 +74,14 @@ if check_password():
         else:
             st.info("Lance vendas para ativar o Dashboard.")
 
-    # --- 2. NOVA VENDA (VISUAL PREMIUM + CÁLCULO VOLTOU) ---
+    # --- 2. NOVA VENDA (VISUAL CARDS ELEGANTES) ---
     with t_venda:
         with st.container(border=True):
             st.subheader("📝 Registrar Novo Pedido")
-            # Fora do form para o cálculo ser em tempo real
-            emp = st.text_input("🏢 Empresa Representada")
-            cli = st.text_input("🏬 Cliente / Loja")
+            
+            col_id1, col_id2 = st.columns(2)
+            emp = col_id1.text_input("🏢 Empresa Representada")
+            cli = col_id2.text_input("🏬 Cliente / Loja")
             prod = st.text_input("📦 Descrição do Produto")
             
             c1, c2, c3 = st.columns(3)
@@ -88,37 +89,61 @@ if check_password():
             v = c2.number_input("💰 Preço Unitário (R$)", min_value=0.0, format="%.2f")
             p = c3.number_input("📈 Comissão %", min_value=0, value=10)
             
-            # CÁLCULO AUTOMÁTICO NA TELA
+            # CÁLCULO E CARDS ELEGANTES
             total_calc = q * v
             comis_calc = total_calc * (p / 100)
             
-            st.info(f"✨ **Resumo:** Total R$ {total_calc:,.2f} | Comissão R$ {comis_calc:,.2f}")
+            st.write("---")
+            # Criando os "balões" de resumo
+            b1, b2, b3 = st.columns([1,1,2])
+            b1.metric("Valor Total", f"R$ {total_calc:,.2f}")
+            b2.metric("Sua Comissão", f"R$ {comis_calc:,.2f}")
             
-            if st.button("🚀 Salvar Venda definitiva"):
+            st.write("") # Espaçamento
+            if st.button("🚀 Salvar Venda definitiva", use_container_width=True):
                 if emp and cli and v > 0:
                     dt = datetime.now().strftime("%d/%m/%Y %H:%M")
                     with sqlite3.connect(DB_NAME) as conn:
                         conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
                                      (dt, emp, cli, prod, q, v, total_calc, comis_calc))
-                    st.success("✅ Venda salva no banco de dados!")
+                    st.success("✅ Venda salva com sucesso!")
                     st.rerun()
+                else:
+                    st.error("⚠️ Preencha Empresa, Cliente e Valor Unitário.")
 
-    # --- 3. HISTÓRICO COM EDIÇÃO (ESTILO EXCEL) ---
+    # --- 3. HISTÓRICO COM RE-CÁLCULO AUTOMÁTICO ---
     with t_hist_vendas:
         st.subheader("📜 Gestão de Pedidos")
         with sqlite3.connect(DB_NAME) as conn:
             df_hist = pd.read_sql("SELECT * FROM vendas ORDER BY id DESC", conn)
         
         if not df_hist.empty:
-            st.warning("⚠️ Se editar algo abaixo, não esqueça de clicar em 'Salvar Alterações'.")
-            # Editor tipo Excel
-            edited_df = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", hide_index=True)
+            st.info("💡 Se você alterar a Quantidade ou Valor Unitário, o Total e a Comissão serão recalculados ao salvar.")
             
-            if st.button("💾 Salvar Alterações na Tabela"):
+            # Editor tipo Excel
+            edited_df = st.data_editor(
+                df_hist, 
+                use_container_width=True, 
+                num_rows="dynamic", 
+                hide_index=True,
+                column_config={
+                    "valor_total": st.column_config.NumberColumn("Total R$", disabled=True), # Travado para não editarem errado
+                    "comissao": st.column_config.NumberColumn("Comissão R$", disabled=True)  # Travado para não editarem errado
+                }
+            )
+            
+            if st.button("💾 Salvar Alterações e Recalcular"):
+                # Lógica de re-cálculo para garantir integridade
+                edited_df["valor_total"] = edited_df["qtd"] * edited_df["valor_unit"]
+                # Para a comissão, precisamos de uma porcentagem. Como não salvamos a % fixa no banco, 
+                # mantemos a proporção original ou assumimos a última usada. 
+                # Aqui, vamos recalcular a comissão baseada na proporção anterior da linha editada:
+                edited_df["comissao"] = edited_df["valor_total"] * (df_hist["comissao"] / df_hist["valor_total"]).fillna(0.1)
+
                 with sqlite3.connect(DB_NAME) as conn:
                     conn.execute("DELETE FROM vendas")
                     edited_df.to_sql("vendas", conn, if_exists="append", index=False)
-                st.success("✨ Alterações salvas!")
+                st.success("✨ Dados salvos e valores recalculados!")
                 st.rerun()
         else:
             st.info("Nenhuma venda encontrada.")
@@ -142,6 +167,15 @@ if check_password():
 
     # --- 5. BANCO DE DADOS CLIENTES ---
     with t_db_cliente:
+        st.subheader("📁 Gerenciar Clientes")
         with sqlite3.connect(DB_NAME) as conn:
             df_c = pd.read_sql("SELECT * FROM clientes ORDER BY razao_social", conn)
-        st.data_editor(df_c, use_container_width=True, num_rows="dynamic", hide_index=True)
+        
+        edited_clients = st.data_editor(df_c, use_container_width=True, num_rows="dynamic", hide_index=True)
+        
+        if st.button("💾 Salvar Mudanças de Clientes"):
+            with sqlite3.connect(DB_NAME) as conn:
+                conn.execute("DELETE FROM clientes")
+                edited_clients.to_sql("clientes", conn, if_exists="append", index=False)
+            st.success("✅ Lista de clientes atualizada!")
+            st.rerun()
