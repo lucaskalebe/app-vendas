@@ -178,15 +178,45 @@ with tabs[2]:
 
 # ================= CLIENTES =================
 with tabs[3]:
-    rs = st.text_input("Razão Social")
-    cj = st.text_input("CNPJ")
-    cat = st.selectbox("Categoria", ["Varejo", "Atacado", "Outros"])
+    st.subheader("👤 Cadastro de Cliente")
+
+    c1, c2 = st.columns(2)
+    rs = c1.text_input("Razão Social")
+    cj = c2.text_input("CNPJ")
+
+    cat = st.selectbox("Categoria", ["Varejo", "Atacado", "Supermercado", "Outros"])
 
     if st.button("Salvar Cliente"):
         run_db(
             "INSERT INTO clientes VALUES (NULL,?,?,?)",
             (rs, cj, cat)
         )
+        st.success("Cliente cadastrado")
+        st.rerun()
+
+    st.divider()
+    st.subheader("📁 Banco de Clientes")
+
+    dfc = run_db("SELECT * FROM clientes", select=True)
+
+    if not dfc.empty:
+        edit = st.data_editor(
+            dfc,
+            num_rows="dynamic",
+            hide_index=True,
+            use_container_width=True,
+            key="clientes_editor"
+        )
+
+        if st.button("💾 Sincronizar Clientes"):
+            with sqlite3.connect(DB) as conn:
+                conn.execute("DELETE FROM clientes")
+                edit.to_sql("clientes", conn, index=False, if_exists="append")
+            st.success("Clientes atualizados")
+            st.rerun()
+    else:
+        st.info("Nenhum cliente cadastrado")
+
         st.success("Cliente salvo")
 
 # ================= USUÁRIOS =================
@@ -208,4 +238,5 @@ with tabs[4]:
     st.divider()
     st.subheader("📋 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
 
