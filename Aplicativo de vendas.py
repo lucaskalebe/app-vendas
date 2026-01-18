@@ -198,16 +198,6 @@ with tabs[1]:
         st.info("Nenhuma venda registrada ainda")
 
 
-# ================= HISTÓRICO =================
-with tabs[2]:
-    df = run_db("SELECT * FROM vendas", select=True)
-    ed = st.data_editor(df, num_rows="dynamic", hide_index=True)
-    if st.button("Sincronizar"):
-        with sqlite3.connect(DB) as conn:
-            conn.execute("DELETE FROM vendas")
-            ed.to_sql("vendas", conn, index=False, if_exists="append")
-        st.success("Atualizado")
-        st.rerun()
 
 # ================= CLIENTES =================
 with tabs[3]:
@@ -271,6 +261,7 @@ with tabs[4]:
     st.divider()
     st.subheader("📋 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
 
 
 
