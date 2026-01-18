@@ -13,6 +13,7 @@ st.set_page_config(
     layout="wide"
 )
 
+DB = "vendas.db"
 
 # Sidebar com o Logo
 with st.sidebar:
@@ -21,6 +22,7 @@ with st.sidebar:
     except:
         st.warning("⚠️ Envie 'logomn.png' para o GitHub.")
     st.divider()
+
 
 
 # ================= 2. BANCO DE DADOS =================
