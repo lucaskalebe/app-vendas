@@ -7,8 +7,12 @@ from datetime import datetime
 from io import BytesIO
 
 # ================= 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA LINHA) =================
-LOGOMN_PATH = r"C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png"
+LOGOMN_PATH = "logomn.png" 
 
+st.set_page_config(
+    page_title="Gestão de Vendas | Meira Nobre",
+    page_icon=LOGOMN_PATH, # Se o ícone der erro, você pode usar um emoji como "📊" temporariamente
+    layout="wide"
 st.set_page_config(
     page_title="Gestão de Vendas | Meira Nobre",
     page_icon=LOGOMN_PATH,
@@ -199,3 +203,4 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
