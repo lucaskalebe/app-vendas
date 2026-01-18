@@ -145,25 +145,58 @@ with tabs[0]:
                 )
 
 # ================= NOVA VENDA =================
+# ================= NOVA VENDA =================
 with tabs[1]:
-    emp = st.text_input("Empresa")
-    cli = st.text_input("Cliente")
+    st.subheader("📝 Registrar Nova Venda")
+
+    c1, c2 = st.columns(2)
+    emp = c1.text_input("Empresa")
+    cli = c2.text_input("Cliente")
     prod = st.text_input("Produto")
 
-    qtd = st.number_input("Qtd", min_value=1, value=1)
-    prc = st.number_input("Preço Unit", min_value=0.0)
-    com = st.number_input("Comissão %", value=10)
+    q1, q2, q3 = st.columns(3)
+    qtd = q1.number_input("Qtd", min_value=1, value=1)
+    prc = q2.number_input("Preço Unit", min_value=0.0)
+    com = q3.number_input("Comissão %", value=10)
 
     total = qtd * prc
     comissao = total * (com / 100)
 
-    if st.button("Salvar Venda"):
-        run_db(
-            "INSERT INTO vendas VALUES (NULL,?,?,?,?,?,?,?,?)",
-            (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, comissao)
+    if st.button("🚀 Salvar Venda", use_container_width=True):
+        if emp and cli and prc > 0:
+            run_db(
+                "INSERT INTO vendas VALUES (NULL,?,?,?,?,?,?,?,?)",
+                (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, comissao)
+            )
+            st.success("Venda registrada")
+            st.rerun()
+        else:
+            st.warning("Preencha os campos obrigatórios")
+
+    # --------- BASE DE VENDAS ----------
+    st.divider()
+    st.subheader("📜 Pedidos Registrados")
+
+    dfv = run_db("SELECT * FROM vendas", select=True)
+
+    if not dfv.empty:
+        edit = st.data_editor(
+            dfv,
+            num_rows="dynamic",
+            hide_index=True,
+            use_container_width=True,
+            key="vendas_editor"
         )
-        st.success("Venda salva")
-        st.rerun()
+
+        if st.button("💾 Sincronizar Pedidos"):
+            with sqlite3.connect(DB) as conn:
+                conn.execute("DELETE FROM vendas")
+                edit.to_sql("vendas", conn, index=False, if_exists="append")
+            st.success("Pedidos atualizados")
+            st.rerun()
+    else:
+        st.info("Nenhuma venda registrada ainda")
+
 
 # ================= HISTÓRICO =================
 with tabs[2]:
@@ -238,5 +271,6 @@ with tabs[4]:
     st.divider()
     st.subheader("📋 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
 
 
