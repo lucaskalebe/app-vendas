@@ -59,18 +59,36 @@ if "user" not in st.session_state:
     st.stop()
 
 # ================= 4. UI CABEÇALHO =================
-col1, col2 = st.columns([1, 5]) 
-with col1:
+# ================= 4. UI CABEÇALHO (ALINHADO E AMPLIADO) =================
+# Ajustamos as colunas: col1 para o logo, col2 para o título
+col_logo, col_titulo = st.columns([1, 2]) 
+
+with col_logo:
     try:
-        st.image(LOGOMN_PATH, width=400)
+        # Mantive o tamanho grande que você pediu
+        st.image(LOGOMN_PATH, width=350) 
     except:
         st.write("📊")
 
-with col2:
-    st.title("Gestão de Vendas | Meira Nobre")
+with col_titulo:
+    # Este bloco CSS força o título a ficar centralizado verticalmente em relação ao logo
+    st.markdown(
+        """
+        <style>
+            .vertical-center {
+                display: flex;
+                align-items: center;
+                height: 250px; /* Ajuste essa altura se o logo for muito maior/menor */
+            }
+        </style>
+        <div class="vertical-center">
+            <h1>Gestão de Vendas | Meira Nobre</h1>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
-
+st.divider() # Uma linha para separar o cabeçalho das abas
 # ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
     dfv = run_db("SELECT * FROM vendas", select=True)
@@ -208,6 +226,7 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
 
