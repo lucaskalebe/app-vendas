@@ -1,23 +1,23 @@
 
 
-import os
 import sqlite3
 import pandas as pd
 import streamlit as st
 from datetime import datetime
+from io import BytesIO
 
-# ================= PDF =================
+# PDF
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.pagesizes import A4
 
 # ================= CONFIG =================
 st.set_page_config("Gestão Meira Nobre", layout="wide")
-DB_NAME = "vendas.db"
+DB = "vendas.db"
 
-# ================= BANCO =================
+# ================= DB =================
 def run_db(query, params=(), select=False):
-    with sqlite3.connect(DB_NAME) as conn:
+    with sqlite3.connect(DB) as conn:
         if select:
             return pd.read_sql(query, conn, params=params)
         conn.execute(query, params)
@@ -29,35 +29,22 @@ def init_db():
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         usuario TEXT UNIQUE,
         senha TEXT
-    )
-    """)
+    )""")
 
     run_db("""
     CREATE TABLE IF NOT EXISTS vendas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        data TEXT,
-        empresa TEXT,
-        cliente TEXT,
-        produto TEXT,
-        qtd INTEGER,
-        valor_unit REAL,
-        valor_total REAL,
-        comissao REAL
-    )
-    """)
+        data TEXT, empresa TEXT, cliente TEXT, produto TEXT,
+        qtd INTEGER, valor_unit REAL, valor_total REAL, comissao REAL
+    )""")
 
     run_db("""
     CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        razao_social TEXT,
-        cnpj TEXT,
-        categoria TEXT
-    )
-    """)
+        razao_social TEXT, cnpj TEXT, categoria TEXT
+    )""")
 
-    # cria admin se não existir
-    u = run_db("SELECT * FROM usuarios", select=True)
-    if u.empty:
+    if run_db("SELECT * FROM usuarios", select=True).empty:
         run_db(
             "INSERT INTO usuarios (usuario, senha) VALUES (?,?)",
             ("admin", "1234")
@@ -83,17 +70,17 @@ if "user" not in st.session_state:
             st.rerun()
         else:
             st.error("Usuário ou senha inválidos")
-
     st.stop()
 
 # ================= UI =================
 st.title("📊 Sistema Meira Nobre")
+
 tabs = st.tabs([
-    "📈 Dashboards",
+    "📈 Dashboard",
     "➕ Nova Venda",
     "📜 Histórico",
-    "👤 Novo Cliente",
-    "📁 Banco de Clientes"
+    "👤 Clientes",
+    "👥 Usuários"
 ])
 
 # ================= DASH =================
@@ -101,50 +88,60 @@ with tabs[0]:
     dfv = run_db("SELECT * FROM vendas", select=True)
 
     if not dfv.empty:
-        dfv["valor_total"] = pd.to_numeric(dfv["valor_total"], errors="coerce").fillna(0)
-        dfv["comissao"] = pd.to_numeric(dfv["comissao"], errors="coerce").fillna(0)
+        dfv[["valor_total", "comissao"]] = dfv[["valor_total", "comissao"]].apply(
+            pd.to_numeric, errors="coerce"
+        ).fillna(0)
 
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
-        c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
-        c3.metric("Pedidos", len(dfv))
-        c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
+        a, b, c, d = st.columns(4)
+        a.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
+        b.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
+        c.metric("Pedidos", len(dfv))
+        d.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
         st.divider()
 
         g1, g2 = st.columns(2)
-        g1.subheader("Vendas por Empresa")
         g1.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
-
-        g2.subheader("Vendas por Cliente")
         g2.bar_chart(dfv.groupby("cliente")["valor_total"].sum())
 
-        # EXPORTAÇÃO
+        # ===== EXPORT EXCEL =====
+        buffer = BytesIO()
+        dfv.to_excel(buffer, index=False, engine="xlsxwriter")
+        buffer.seek(0)
+
         e1, e2 = st.columns(2)
 
         e1.download_button(
-            "📥 Exportar Excel",
-            data=dfv.to_excel(index=False, engine="xlsxwriter"),
-            file_name="vendas.xlsx"
+            "📥 Baixar Excel",
+            data=buffer,
+            file_name="vendas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
         )
 
+        # ===== PDF =====
         def gerar_pdf(df):
             path = "/tmp/vendas.pdf"
             doc = SimpleDocTemplate(path, pagesize=A4)
             styles = getSampleStyleSheet()
-            elements = [Paragraph("Relatório de Vendas", styles["Title"]), Spacer(1, 12)]
-            elements.append(Table([df.columns.tolist()] + df.values.tolist()))
-            doc.build(elements)
+
+            elems = [
+                Paragraph("Relatório de Vendas – Meira Nobre", styles["Title"]),
+                Spacer(1, 12),
+                Table([df.columns.tolist()] + df.values.tolist())
+            ]
+            doc.build(elems)
             return path
 
-        if e2.button("📄 Gerar PDF"):
+        if e2.button("📄 Gerar PDF", use_container_width=True):
             pdf = gerar_pdf(dfv)
             with open(pdf, "rb") as f:
                 e2.download_button(
                     "⬇️ Baixar PDF",
                     data=f,
                     file_name="vendas.pdf",
-                    mime="application/pdf"
+                    mime="application/pdf",
+                    use_container_width=True
                 )
 
 # ================= NOVA VENDA =================
@@ -165,17 +162,17 @@ with tabs[1]:
             "INSERT INTO vendas VALUES (NULL,?,?,?,?,?,?,?,?)",
             (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, comissao)
         )
-        st.success("Venda registrada")
+        st.success("Venda salva")
         st.rerun()
 
 # ================= HISTÓRICO =================
 with tabs[2]:
     df = run_db("SELECT * FROM vendas", select=True)
-    edit = st.data_editor(df, num_rows="dynamic", hide_index=True)
+    ed = st.data_editor(df, num_rows="dynamic", hide_index=True)
     if st.button("Sincronizar"):
-        with sqlite3.connect(DB_NAME) as conn:
+        with sqlite3.connect(DB) as conn:
             conn.execute("DELETE FROM vendas")
-            edit.to_sql("vendas", conn, index=False, if_exists="append")
+            ed.to_sql("vendas", conn, index=False, if_exists="append")
         st.success("Atualizado")
         st.rerun()
 
@@ -184,19 +181,31 @@ with tabs[3]:
     rs = st.text_input("Razão Social")
     cj = st.text_input("CNPJ")
     cat = st.selectbox("Categoria", ["Varejo", "Atacado", "Outros"])
+
     if st.button("Salvar Cliente"):
         run_db(
             "INSERT INTO clientes VALUES (NULL,?,?,?)",
             (rs, cj, cat)
         )
-        st.success("Cliente cadastrado")
+        st.success("Cliente salvo")
 
+# ================= USUÁRIOS =================
 with tabs[4]:
-    dfc = run_db("SELECT * FROM clientes", select=True)
-    edit = st.data_editor(dfc, num_rows="dynamic", hide_index=True)
-    if st.button("Sincronizar Clientes"):
-        with sqlite3.connect(DB_NAME) as conn:
-            conn.execute("DELETE FROM clientes")
-            edit.to_sql("clientes", conn, index=False, if_exists="append")
-        st.success("Atualizado")
-        st.rerun()
+    st.subheader("➕ Novo Usuário")
+    u = st.text_input("Usuário novo")
+    s = st.text_input("Senha nova", type="password")
+
+    if st.button("Criar Usuário"):
+        try:
+            run_db(
+                "INSERT INTO usuarios (usuario, senha) VALUES (?,?)",
+                (u, s)
+            )
+            st.success("Usuário criado")
+        except:
+            st.error("Usuário já existe")
+
+    st.divider()
+    st.subheader("📋 Usuários")
+    st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
