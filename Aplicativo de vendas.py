@@ -55,9 +55,13 @@ with tabs[0]:
     # --- Seção de Vendas ---
     st.subheader("💰 Indicadores de Vendas")
     if not dfv.empty:
-        # Tratamento de dados para cálculos
-        for col in ["valor_total", "comissao", "qtd"]:
-            dfv[col] = pd.to_numeric(dfv[col].toString().replace('R$', '').replace('.', '').replace(',', '.'), errors='coerce').fillna(0) if dfv[col].dtype == object else pd.to_numeric(dfv[col], errors='coerce').fillna(0)
+        # CORREÇÃO DO ERRO: Limpeza de strings R$ e conversão numérica
+        for col in ["valor_total", "comissao", "valor_unit"]:
+            if dfv[col].dtype == object:
+                dfv[col] = dfv[col].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
+            dfv[col] = pd.to_numeric(dfv[col], errors='coerce').fillna(0)
+        
+        dfv["qtd"] = pd.to_numeric(dfv["qtd"], errors='coerce').fillna(0)
 
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
@@ -65,33 +69,32 @@ with tabs[0]:
         c3.metric("Pedidos", len(dfv))
         c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
+        st.divider()
         g1, g2 = st.columns(2)
-        g1.write("### Faturamento por Empresa")
-        g1.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
-        g2.write("### Faturamento por Segmento")
-        g2.bar_chart(dfv.groupby("segmento")["valor_total"].sum())
+        with g1:
+            st.write("### Faturamento por Empresa")
+            st.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
+        with g2:
+            st.write("### Faturamento por Segmento")
+            st.bar_chart(dfv.groupby("segmento")["valor_total"].sum())
     else:
         st.info("Aguardando registro de vendas.")
 
     st.divider()
 
-    # --- Seção de Clientes (NOVO DASH) ---
+    # --- Seção de Clientes (DASHBOARD DE CLIENTES) ---
     st.subheader("👥 Dashboard de Clientes")
     if not dfc.empty:
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
+        k1, k2 = st.columns([1, 2])
+        with k1:
             st.metric("Total de Clientes", len(dfc))
-            st.write("### Clientes por Categoria")
-            # Gráfico de pizza/barras para categorias
-            cat_dist = dfc["categoria"].value_counts()
-            st.bar_chart(cat_dist)
-            
-        with col2:
-            st.write("### Últimos Clientes Cadastrados")
-            st.table(dfc.tail(5)[["razao_social", "categoria"]])
+            st.write("### Por Categoria")
+            st.bar_chart(dfc["categoria"].value_counts())
+        with k2:
+            st.write("### Clientes Cadastrados")
+            st.dataframe(dfc[["razao_social", "cnpj", "categoria"]], hide_index=True, use_container_width=True)
     else:
-        st.info("Nenhum cliente cadastrado no banco de dados.")
+        st.info("Nenhum cliente cadastrado ainda.")
 
 # ================= NOVA VENDA =================
 with tabs[1]:
@@ -113,14 +116,21 @@ with tabs[1]:
         if st.form_submit_button("🚀 Salvar Venda"):
             total = qtd * prc
             v_com = total * (com / 100)
-            run_db("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento) VALUES (?,?,?,?,?,?,?,?,?)",
+            run_db("""INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento) 
+                   VALUES (?,?,?,?,?,?,?,?,?)""",
                    (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_com, seg))
             st.success("Venda registrada!")
             st.rerun()
 
-# ================= ABA CLIENTES (Cadastro e Edição) =================
+    st.divider()
+    dfv_list = run_db("SELECT * FROM vendas", select=True)
+    if not dfv_list.empty:
+        st.write("### Pedidos Registrados")
+        st.data_editor(dfv_list, hide_index=True, use_container_width=True)
+
+# ================= CLIENTES =================
 with tabs[2]:
-    st.subheader("👤 Gestão de Clientes")
+    st.subheader("👤 Cadastro de Cliente")
     with st.form("cli_form"):
         rs = st.text_input("Razão Social")
         cj = st.text_input("CNPJ")
@@ -128,18 +138,8 @@ with tabs[2]:
         if st.form_submit_button("Salvar Cliente"):
             run_db("INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)", (rs, cj, ct))
             st.rerun()
-    
-    st.divider()
-    df_c_edit = run_db("SELECT * FROM clientes", select=True)
-    if not df_c_edit.empty:
-        new_dfc = st.data_editor(df_c_edit, hide_index=True, use_container_width=True, num_rows="dynamic")
-        if st.button("💾 Sincronizar Clientes"):
-            with sqlite3.connect(DB) as conn:
-                conn.execute("DELETE FROM clientes")
-                new_dfc.to_sql("clientes", conn, index=False, if_exists="append")
-            st.rerun()
 
 # ================= USUÁRIOS =================
 with tabs[3]:
-    st.subheader("👥 Usuários do Sistema")
+    st.subheader("👥 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
