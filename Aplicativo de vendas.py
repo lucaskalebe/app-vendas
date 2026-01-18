@@ -9,7 +9,7 @@ st.set_page_config("Gestão de Vendas | Meira Nobre", layout="wide")
 DB = "vendas.db"
 
 # Adicione isso logo após o st.set_page_config
-st.sidebar.image("C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png", use_container_width=True)
+st.sidebar.image(r"C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png", use_container_width=True)
 
 # ================= DB =================
 def run_db(query, params=(), select=False):
@@ -60,7 +60,7 @@ tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuá
 
 st.set_page_config(
     page_title="Gestão de Vendas | Meira Nobre",
-    page_icon="C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png",
+    page_icon=(r"C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png"),
     layout="wide"
 
 # ================= DASHBOARD (Aba 0) =================
@@ -216,6 +216,7 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
 
