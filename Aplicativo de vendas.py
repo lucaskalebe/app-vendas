@@ -8,6 +8,9 @@ from io import BytesIO
 st.set_page_config("Gestão de Vendas | Meira Nobre", layout="wide")
 DB = "vendas.db"
 
+# Adicione isso logo após o st.set_page_config
+st.sidebar.image("C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png", use_container_width=True)
+
 # ================= DB =================
 def run_db(query, params=(), select=False):
     with sqlite3.connect(DB) as conn:
@@ -44,9 +47,21 @@ if "user" not in st.session_state:
     st.stop()
 
 # ================= UI =================
-st.title("📊 Gestão de Vendas | Meira Nobre")
+# Substitua a linha st.title("📊 Gestão de Vendas...") por:
+col1, col2 = st.columns([1, 5]) # Ajuste a proporção conforme o tamanho do seu logo
+
+with col1:
+    st.image("seu_logo.png", width=100) # Ajuste a largura (width)
+
+with col2:
+    st.title("Gestão de Vendas | Meira Nobre")
 
 tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
+
+st.set_page_config(
+    page_title="Gestão de Vendas | Meira Nobre",
+    page_icon="C:\Users\lucas\OneDrive\Área de Trabalho\CodePython\logomn.png",
+    layout="wide"
 
 # ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
@@ -201,5 +216,6 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
