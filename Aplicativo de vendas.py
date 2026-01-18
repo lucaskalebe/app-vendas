@@ -30,7 +30,7 @@ def check_password():
 def init_db():
     with sqlite3.connect(DB_NAME) as conn:
         cursor = conn.cursor()
-        # Tabelas base
+        # Tabelas base sem o campo 'segmento' para evitar erros
         conn.execute("""
             CREATE TABLE IF NOT EXISTS vendas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,7 +45,7 @@ def init_db():
             )
         """)
         
-        # Migração automática para garantir que as colunas existam (evita KeyError)
+        # Migração automática de colunas para a tabela clientes
         cursor.execute("PRAGMA table_info(clientes)")
         cols_c = [c[1] for c in cursor.fetchall()]
         for col in ['telefone', 'email', 'categoria']:
@@ -62,7 +62,7 @@ if check_password():
         "📈 Dashboard Pro", "➕ Nova Venda", "📜 Histórico e Edição", "👤 Cadastro Cliente", "📁 Banco de Dados Clientes"
     ])
 
-    # --- 1. DASHBOARD ---
+    # --- 1. DASHBOARD (FOCO EM CLIENTES) ---
     with t_dash:
         with sqlite3.connect(DB_NAME) as conn:
             df_v = pd.read_sql("SELECT * FROM vendas", conn)
@@ -94,7 +94,7 @@ if check_password():
                 st.write("**Resumo por Categoria**")
                 st.write(df_c['categoria'].value_counts())
             with c_col2:
-                st.write("**Distribuição Visual**")
+                st.write("**Distribuição de Lojas**")
                 st.bar_chart(df_c.groupby("categoria").size())
 
     # --- 2. NOVA VENDA ---
@@ -130,20 +130,21 @@ if check_password():
                     st.success("✅ Venda registrada!")
                     st.rerun()
                 else:
-                    st.error("⚠️ Preencha os campos obrigatórios.")
+                    st.error("⚠️ Preencha Empresa, Cliente e Valor.")
 
-    # --- 3. HISTÓRICO ---
+    # --- 3. HISTÓRICO E EDIÇÃO ---
     with t_hist_vendas:
         st.subheader("📜 Gestão de Pedidos")
         with sqlite3.connect(DB_NAME) as conn:
             df_hist = pd.read_sql("SELECT * FROM vendas ORDER BY id DESC", conn)
         
         if not df_hist.empty:
-            edited_df = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", hide_index=True)
-            if st.button("💾 Confirmar Alterações"):
+            # Reativado num_rows="dynamic" para permitir excluir/add linhas
+            edited_vendas = st.data_editor(df_hist, use_container_width=True, num_rows="dynamic", hide_index=True, key="editor_v")
+            if st.button("💾 Salvar Alterações em Vendas"):
                 with sqlite3.connect(DB_NAME) as conn:
                     conn.execute("DELETE FROM vendas")
-                    edited_df.to_sql("vendas", conn, if_exists="append", index=False)
+                    edited_vendas.to_sql("vendas", conn, if_exists="append", index=False)
                 st.success("✨ Histórico atualizado!")
                 st.rerun()
 
@@ -168,6 +169,22 @@ if check_password():
 
     # --- 5. BANCO DE DADOS CLIENTES ---
     with t_db_cliente:
+        st.subheader("📁 Gerenciar Base de Clientes")
         with sqlite3.connect(DB_NAME) as conn:
             df_c_list = pd.read_sql("SELECT * FROM clientes", conn)
-        st.dataframe(df_c_list, use_container_width=True)
+        
+        # Corrigido: data_editor com num_rows="dynamic" para voltar os botões de excluir/add
+        edited_clients = st.data_editor(
+            df_c_list, 
+            use_container_width=True, 
+            num_rows="dynamic", 
+            hide_index=True,
+            key="editor_c"
+        )
+        
+        if st.button("💾 Salvar Alterações na Base de Clientes"):
+            with sqlite3.connect(DB_NAME) as conn:
+                conn.execute("DELETE FROM clientes")
+                edited_clients.to_sql("clientes", conn, if_exists="append", index=False)
+            st.success("✨ Base de clientes sincronizada!")
+            st.rerun()
