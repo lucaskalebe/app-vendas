@@ -44,7 +44,8 @@ if "user" not in st.session_state:
     st.stop()
 
 # ================= UI =================
-st.title("📊 Sistema Meira Nobre")
+st.title("📊 Gestão de Vendas | Meira Nobre")
+
 tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
 
 # ================= DASHBOARD (Aba 0) =================
