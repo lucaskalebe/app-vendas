@@ -91,35 +91,70 @@ with tabs[0]:
 # ================= NOVA VENDA (Aba 1) =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
+
     clientes_sel = run_db("SELECT razao_social FROM clientes", select=True)
-    
+
     with st.form("venda_form"):
         c1, c2 = st.columns(2)
         emp = c1.text_input("Empresa")
-        cli = c2.selectbox("Cliente", clientes_sel["razao_social"] if not clientes_sel.empty else ["Cadastre um cliente"])
+        cli = c2.selectbox(
+            "Cliente",
+            clientes_sel["razao_social"].tolist() if not clientes_sel.empty else ["Cadastre um cliente"]
+        )
         prod = st.text_input("Produto")
-        seg = st.selectbox("Segmento", ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação", "Outros"])
-        
+        seg = st.selectbox(
+            "Segmento",
+            ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação", "Outros"]
+        )
+
         q1, q2, q3 = st.columns(3)
         qtd = q1.number_input("Qtd", min_value=1, value=1)
         prc = q2.number_input("Preço Unit", min_value=0.0)
         com = q3.number_input("Comissão %", value=10)
-        
+
         if st.form_submit_button("🚀 Salvar Venda"):
-            if cli != "Cadastre um cliente" and emp:
+            if emp and cli != "Cadastre um cliente" and prc > 0:
                 total = qtd * prc
                 v_com = total * (com / 100)
-                run_db("""INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento) 
-                       VALUES (?,?,?,?,?,?,?,?,?)""",
-                       (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_com, seg))
+
+                run_db("""
+                    INSERT INTO vendas 
+                    (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    datetime.now().strftime("%d/%m/%Y"),
+                    emp, cli, prod, qtd, prc, total, v_com, seg
+                ))
+
                 st.success("Venda registrada!")
                 st.rerun()
+            else:
+                st.warning("Preencha os campos obrigatórios")
 
+    # ---------- TABELA EDITÁVEL DE VENDAS ----------
     st.divider()
-    dfv_list = run_db("SELECT * FROM vendas", select=True)
-    if not dfv_list.empty:
-        st.write("### Histórico de Pedidos")
-        st.data_editor(dfv_list, hide_index=True, use_container_width=True)
+    st.subheader("📜 Pedidos Registrados")
+
+    dfv_edit = run_db("SELECT * FROM vendas", select=True)
+
+    if not dfv_edit.empty:
+        new_dfv = st.data_editor(
+            dfv_edit,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="dynamic",
+            key="vendas_editor"
+        )
+
+        if st.button("💾 Sincronizar Pedidos"):
+            with sqlite3.connect(DB) as conn:
+                conn.execute("DELETE FROM vendas")
+                new_dfv.to_sql("vendas", conn, index=False, if_exists="append")
+            st.success("Pedidos sincronizados!")
+            st.rerun()
+    else:
+        st.info("Nenhuma venda registrada ainda")
+
 
 # ================= CLIENTES (Aba 2) =================
 with tabs[2]:
@@ -165,3 +200,4 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
