@@ -84,6 +84,7 @@ tabs = st.tabs([
 
 # ================= DASH =================
 with tabs[0]:
+
     dfv = run_db("SELECT * FROM vendas", select=True)
 
     if not dfv.empty:
@@ -242,7 +243,7 @@ with tabs[3]:
         st.success("Cliente salvo")
 
 # ================= USUÁRIOS =================
-with tabs[4]:
+with tabs[3]:
     st.subheader("➕ Novo Usuário")
     u = st.text_input("Usuário novo")
     s = st.text_input("Senha nova", type="password")
@@ -260,6 +261,7 @@ with tabs[4]:
     st.divider()
     st.subheader("📋 Usuários")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
+
 
 
 
