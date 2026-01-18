@@ -3,217 +3,131 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime
+import io
 
-# =============================
-# CONFIGURAÇÕES GERAIS
-# =============================
-SENHA_MESTRE = os.getenv("SENHA_APP", "1234")  # fallback apenas para estudo
+# ================== CONFIGURAÇÕES ==================
+SENHA_MESTRE = os.getenv("SENHA_APP", "1234")
 DB_NAME = "vendas.db"
 
-st.set_page_config(page_title="Sistema de Vendas", layout="wide")
-
-
-# =============================
-# AUTENTICAÇÃO
-# =============================
 def check_password():
     if "autenticado" not in st.session_state:
         st.session_state["autenticado"] = False
-
     if not st.session_state["autenticado"]:
         st.title("🔒 Acesso Restrito")
-        senha = st.text_input("Digite a senha:", type="password")
-
+        senha = st.text_input("Digite a senha", type="password")
         if st.button("Entrar"):
             if senha == SENHA_MESTRE:
                 st.session_state["autenticado"] = True
                 st.rerun()
             else:
-                st.error("Senha incorreta.")
+                st.error("Senha incorreta")
         return False
     return True
 
-
-# =============================
-# BANCO DE DADOS
-# =============================
-def get_conn():
-    return sqlite3.connect(DB_NAME, check_same_thread=False)
-
-
 def init_db():
-    with get_conn() as conn:
-        c = conn.cursor()
-
-        c.execute("""
-            CREATE TABLE IF NOT EXISTS clientes (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nome_fantasia TEXT,
-                contato TEXT,
-                cidade TEXT
-            )
-        """)
-
-        c.execute("""
+    with sqlite3.connect(DB_NAME) as conn:
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS vendas (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                data TEXT,
-                empresa TEXT,
-                cliente TEXT,
-                produto TEXT,
-                valor_total REAL,
-                comissao REAL
+                data TEXT, empresa TEXT, cliente TEXT, produto TEXT,
+                qtd INTEGER, valor_unit REAL, valor_total REAL, comissao REAL
             )
         """)
-
-
-# =============================
-# CLIENTES
-# =============================
-def salvar_cliente(nome, contato, cidade):
-    with get_conn() as conn:
-        conn.execute(
-            "INSERT INTO clientes (nome_fantasia, contato, cidade) VALUES (?, ?, ?)",
-            (nome, contato, cidade)
-        )
-
-
-def carregar_clientes():
-    return pd.read_sql("SELECT * FROM clientes", get_conn())
-
-
-# =============================
-# VENDAS
-# =============================
-def salvar_venda(empresa, cliente, produto, valor, perc):
-    data = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    comissao = valor * (perc / 100)
-
-    with get_conn() as conn:
         conn.execute("""
-            INSERT INTO vendas (data, empresa, cliente, produto, valor_total, comissao)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (data, empresa, cliente, produto, valor, comissao))
+            CREATE TABLE IF NOT EXISTS clientes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cnpj TEXT, razao_social TEXT, nome_fantasia TEXT,
+                inscricao_estadual TEXT, telefone TEXT, email TEXT, responsavel TEXT
+            )
+        """)
+        conn.commit()
 
+# ================== INTERFACE ==================
+if check_password():
+    init_db()
+    st.set_page_config(page_title="Gestão Meira Nobre", layout="wide")
+    st.title("📊 Sistema de Gestão Meira Nobre")
 
-def carregar_vendas():
-    return pd.read_sql("SELECT * FROM vendas", get_conn())
+    # Criando as 5 abas conforme você pediu
+    t_dash, t_venda, t_hist_vendas, t_cad_cliente, t_db_cliente = st.tabs([
+        "📈 Dashboard", 
+        "➕ Nova Venda", 
+        "📜 Histórico Vendas", 
+        "👤 Cadastro Cliente", 
+        "📁 Banco de Dados Clientes"
+    ])
 
-
-# =============================
-# APP
-# =============================
-if not check_password():
-    st.stop()
-
-init_db()
-
-st.title("📊 Sistema de Controle de Vendas")
-
-abas = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👥 Clientes", "📜 Histórico"])
-
-df_vendas = carregar_vendas()
-df_clientes = carregar_clientes()
-
-lista_clientes = (
-    df_clientes["nome_fantasia"]
-    .dropna()
-    .unique()
-    .tolist()
-    if not df_clientes.empty else []
-)
-
-# =============================
-# DASHBOARD
-# =============================
-with abas[0]:
-    st.subheader("Visão Geral")
-
-    col1, col2 = st.columns(2)
-    col1.metric("Total Vendido", f"R$ {df_vendas['valor_total'].sum():,.2f}")
-    col2.metric("Total em Comissões", f"R$ {df_vendas['comissao'].sum():,.2f}")
-
-    if not df_vendas.empty:
-        st.bar_chart(df_vendas.groupby("empresa")["valor_total"].sum())
-
-
-# =============================
-# NOVA VENDA
-# =============================
-with abas[1]:
-    st.subheader("Registrar Nova Venda")
-
-    with st.form("nova_venda"):
-        empresa = st.text_input("Empresa")
-        produto = st.text_input("Produto")
-
-        if lista_clientes:
-            cliente = st.selectbox("Cliente / Loja", lista_clientes)
+    # --- 1. DASHBOARD ---
+    with t_dash:
+        with sqlite3.connect(DB_NAME) as conn:
+            df_v = pd.read_sql("SELECT * FROM vendas", conn)
+        if not df_v.empty:
+            c1, c2 = st.columns(2)
+            c1.metric("Faturamento Total", f"R$ {df_v['valor_total'].sum():,.2f}")
+            c2.metric("Total Comissões", f"R$ {df_v['comissao'].sum():,.2f}")
+            st.bar_chart(df_v.groupby("empresa")["valor_total"].sum())
         else:
-            st.warning("Cadastre um cliente antes de registrar vendas.")
-            cliente = None
+            st.info("Sem dados para o Dashboard.")
 
-        col1, col2 = st.columns(2)
-        valor = col1.number_input("Valor da Venda (R$)", min_value=0.0)
-        perc = col2.number_input("Comissão (%)", value=10.0)
-
-        if st.form_submit_button("Salvar Venda"):
-            if empresa and cliente and valor > 0:
-                salvar_venda(empresa, cliente, produto, valor, perc)
-                st.success("Venda registrada com sucesso!")
+    # --- 2. NOVA VENDA ---
+    with t_venda:
+        with st.form("f_venda", clear_on_submit=True):
+            emp = st.text_input("Empresa")
+            cli = st.text_input("Cliente")
+            prod = st.text_input("Produto")
+            col1, col2, col3 = st.columns(3)
+            q = col1.number_input("Qtd", min_value=1)
+            v = col2.number_input("Preço Unit.", min_value=0.0)
+            p = col3.number_input("Comissão %", min_value=0, value=10)
+            
+            total = q * v
+            comis = total * (p / 100)
+            st.info(f"Resumo: Total R$ {total:,.2f} | Comissão R$ {comis:,.2f}")
+            
+            if st.form_submit_button("Salvar Venda"):
+                dt = datetime.now().strftime("%d/%m/%Y %H:%M")
+                with sqlite3.connect(DB_NAME) as conn:
+                    conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
+                                 (dt, emp, cli, prod, q, v, total, comis))
+                st.success("Venda salva!")
                 st.rerun()
-            else:
-                st.error("Preencha empresa, cliente e valor corretamente.")
 
+    # --- 3. HISTÓRICO VENDAS ---
+    with t_hist_vendas:
+        with sqlite3.connect(DB_NAME) as conn:
+            df_h = pd.read_sql("SELECT * FROM vendas ORDER BY id DESC", conn)
+        st.dataframe(df_h, use_container_width=True)
+        if not df_h.empty:
+            buf = io.BytesIO()
+            df_h.to_excel(buf, index=False, engine='xlsxwriter')
+            st.download_button("📥 Baixar Excel Vendas", buf.getvalue(), "vendas.xlsx", "application/vnd.ms-excel")
 
-# =============================
-# CLIENTES
-# =============================
-with abas[2]:
-    st.subheader("Cadastro de Clientes")
+    # --- 4. CADASTRO CLIENTE ---
+    with t_cad_cliente:
+        with st.form("f_cli", clear_on_submit=True):
+            cnpj = st.text_input("CNPJ")
+            razao = st.text_input("Razão Social")
+            fant = st.text_input("Nome Fantasia")
+            tel = st.text_input("Telefone")
+            email = st.text_input("E-mail")
+            resp = st.text_input("Responsável")
+            
+            if st.form_submit_button("Cadastrar Cliente"):
+                if razao:
+                    with sqlite3.connect(DB_NAME) as conn:
+                        conn.execute("INSERT INTO clientes (cnpj, razao_social, nome_fantasia, telefone, email, responsavel) VALUES (?,?,?,?,?,?)",
+                                     (cnpj, razao, fant, tel, email, resp))
+                    st.success("Cliente cadastrado!")
+                    st.rerun()
+                else:
+                    st.error("Razão Social é obrigatória!")
 
-    with st.form("novo_cliente"):
-        nome = st.text_input("Nome Fantasia")
-        contato = st.text_input("Contato")
-        cidade = st.text_input("Cidade")
-
-        if st.form_submit_button("Salvar Cliente"):
-            if nome:
-                salvar_cliente(nome, contato, cidade)
-                st.success("Cliente cadastrado!")
-                st.rerun()
-            else:
-                st.warning("Nome Fantasia é obrigatório.")
-
-    st.divider()
-    st.dataframe(df_clientes, use_container_width=True)
-
-
-# =============================
-# HISTÓRICO
-# =============================
-with abas[3]:
-    st.subheader("Histórico de Vendas")
-
-    empresa_filtro = st.selectbox(
-        "Filtrar por Empresa",
-        ["Todas"] + sorted(df_vendas["empresa"].dropna().unique().tolist())
-        if not df_vendas.empty else ["Todas"]
-    )
-
-    df_filtrado = df_vendas.copy()
-    if empresa_filtro != "Todas":
-        df_filtrado = df_filtrado[df_filtrado["empresa"] == empresa_filtro]
-
-    st.dataframe(df_filtrado, use_container_width=True)
-
-    st.divider()
-    st.subheader("Excluir Última Venda")
-
-    confirmar = st.checkbox("Confirmo que desejo apagar o último registro")
-
-    if confirmar and st.button("Apagar Última Venda"):
-        with get_conn() as conn:
-            conn.execute("DELETE FROM vendas WHERE id = (SELECT MAX(id) FROM vendas)")
-        st.success("Última venda removida.")
-        st.rerun()
+    # --- 5. BANCO DE DADOS CLIENTES ---
+    with t_db_cliente:
+        with sqlite3.connect(DB_NAME) as conn:
+            df_c = pd.read_sql("SELECT * FROM clientes ORDER BY razao_social", conn)
+        st.dataframe(df_c, use_container_width=True)
+        if not df_c.empty:
+            buf_c = io.BytesIO()
+            df_c.to_excel(buf_c, index=False, engine='xlsxwriter')
+            st.download_button("📥 Baixar Excel Clientes", buf_c.getvalue(), "clientes.xlsx", "application/vnd.ms-excel")
