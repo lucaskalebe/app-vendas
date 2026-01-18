@@ -1,5 +1,3 @@
-
-
 import sqlite3
 import pandas as pd
 import streamlit as st
@@ -7,21 +5,20 @@ from datetime import datetime
 from io import BytesIO
 
 # ================= 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA LINHA) =================
-# No Streamlit Cloud, use apenas o nome do arquivo que está no seu GitHub
 LOGOMN_PATH = "logomn.png" 
 
 st.set_page_config(
     page_title="Gestão de Vendas | Meira Nobre",
-    page_icon="📊", # Usei um emoji aqui para garantir que não dê erro na aba
+    page_icon="📊", 
     layout="wide"
 )
 
-# Sidebar com o Logo (Protegido para não travar o app)
+# Sidebar com o Logo
 with st.sidebar:
     try:
         st.image(LOGOMN_PATH, use_container_width=True)
     except:
-        st.warning("⚠️ Arquivo 'logomn.png' não encontrado no repositório.")
+        st.warning("⚠️ Arquivo 'logomn.png' não encontrado no GitHub.")
     st.divider()
 
 DB = "vendas.db"
@@ -81,7 +78,7 @@ with tabs[0]:
 
     st.subheader("💰 Indicadores de Vendas")
     if not dfv.empty:
-        # Conversão segura
+        # Tratamento de dados para cálculos
         for col in ["valor_total", "comissao", "valor_unit"]:
             if dfv[col].dtype == object:
                 dfv[col] = dfv[col].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -89,13 +86,14 @@ with tabs[0]:
         
         dfv["qtd"] = pd.to_numeric(dfv["qtd"], errors='coerce').fillna(0)
 
+        # Métricas Principais
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
         c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
         c3.metric("Pedidos", len(dfv))
         c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
-        # Exportar para Excel
+        # Botão Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             dfv.to_excel(writer, index=False, sheet_name='Vendas')
@@ -117,6 +115,19 @@ with tabs[0]:
             st.bar_chart(dfv.groupby("segmento")["valor_total"].sum())
     else:
         st.info("Nenhuma venda registrada.")
+
+    # --- SESSÃO RESTAURADA: RESUMO DE CLIENTES ---
+    st.divider()
+    st.subheader("👥 Resumo de Clientes")
+    if not dfc.empty:
+        res1, res2 = st.columns(2)
+        res1.metric("Total de Clientes Cadastrados", len(dfc)) # Número que havia sumido
+        with res2:
+            st.write("### Clientes por Categoria")
+            st.bar_chart(dfc["categoria"].value_counts())
+    else:
+        st.info("Nenhum cliente cadastrado.")
+
 # ================= NOVA VENDA (Aba 1) =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
@@ -145,15 +156,15 @@ with tabs[1]:
                 st.rerun()
 
     st.divider()
-    st.subheader("📜 Pedidos Registrados")
+    st.subheader("📜 Histórico de Pedidos")
     dfv_edit = run_db("SELECT * FROM vendas", select=True)
     if not dfv_edit.empty:
         new_dfv = st.data_editor(dfv_edit, hide_index=True, use_container_width=True, num_rows="dynamic", key="v_editor")
-        if st.button("💾 Sincronizar Pedidos"):
+        if st.button("💾 Sincronizar Alterações de Pedidos"):
             with sqlite3.connect(DB) as conn:
                 conn.execute("DELETE FROM vendas")
                 new_dfv.to_sql("vendas", conn, index=False, if_exists="append")
-            st.success("Pedidos sincronizados!")
+            st.success("Sincronizado com sucesso!")
             st.rerun()
 
 # ================= CLIENTES (Aba 2) =================
@@ -173,11 +184,11 @@ with tabs[2]:
     df_c_edit = run_db("SELECT * FROM clientes", select=True)
     if not df_c_edit.empty:
         new_dfc = st.data_editor(df_c_edit, hide_index=True, use_container_width=True, num_rows="dynamic", key="c_editor")
-        if st.button("💾 Sincronizar Clientes"):
+        if st.button("💾 Sincronizar Alterações de Clientes"):
             with sqlite3.connect(DB) as conn:
                 conn.execute("DELETE FROM clientes")
                 new_dfc.to_sql("clientes", conn, index=False, if_exists="append")
-            st.success("Sincronizado!")
+            st.success("Clientes sincronizados!")
             st.rerun()
 
 # ================= USUÁRIOS (Aba 3) =================
@@ -197,5 +208,3 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
-
-
