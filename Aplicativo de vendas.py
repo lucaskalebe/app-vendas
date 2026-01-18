@@ -59,7 +59,7 @@ if "user" not in st.session_state:
     st.stop()
 
 # ================= 4. UI CABEÇALHO =================
-col1, col2 = st.columns([1, 5]) 
+col1, col2 = st.columns([1, 3]) 
 with col1:
     try:
         st.image(LOGOMN_PATH, width=100)
@@ -208,3 +208,4 @@ with tabs[3]:
     st.divider()
     st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
