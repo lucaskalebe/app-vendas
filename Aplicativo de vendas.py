@@ -4,7 +4,7 @@ import streamlit as st
 from datetime import datetime
 from io import BytesIO
 
-# ================= 1. CONFIGURAÇÃO (DEVE SER A PRIMEIRA LINHA) =================
+# ================= 1. CONFIGURAÇÃO (PRIMEIRA LINHA) =================
 LOGOMN_PATH = "logomn.png" 
 
 st.set_page_config(
@@ -18,7 +18,7 @@ with st.sidebar:
     try:
         st.image(LOGOMN_PATH, use_container_width=True)
     except:
-        st.warning("⚠️ Arquivo 'logomn.png' não encontrado no GitHub.")
+        st.warning("⚠️ Envie 'logomn.png' para o GitHub.")
     st.divider()
 
 DB = "vendas.db"
@@ -58,37 +58,36 @@ if "user" not in st.session_state:
             st.error("Usuário ou senha inválidos")
     st.stop()
 
-# ================= 4. UI CABEÇALHO =================
-# ================= 4. UI CABEÇALHO (ALINHADO E AMPLIADO) =================
-# Ajustamos as colunas: col1 para o logo, col2 para o título
-col_logo, col_titulo = st.columns([1, 2]) 
+# ================= 4. UI CABEÇALHO (ALINHADO) =================
+col_logo, col_titulo = st.columns([1, 3]) 
 
 with col_logo:
     try:
-        # Mantive o tamanho grande que você pediu
-        st.image(LOGOMN_PATH, width=350) 
+        st.image(LOGOMN_PATH, width=300) 
     except:
         st.write("📊")
 
 with col_titulo:
-    # Este bloco CSS força o título a ficar centralizado verticalmente em relação ao logo
+    # CSS para centralizar o texto verticalmente com a imagem
     st.markdown(
         """
         <style>
-            .vertical-center {
+            .alinhado {
                 display: flex;
                 align-items: center;
-                height: 250px; /* Ajuste essa altura se o logo for muito maior/menor */
+                height: 200px; /* Ajuste se mudar o tamanho da imagem */
             }
         </style>
-        <div class="vertical-center">
-            <h1>Gestão de Vendas | Meira Nobre</h1>
+        <div class="alinhado">
+            <h1 style='margin: 0;'>Gestão de Vendas | Meira Nobre</h1>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-st.divider() # Uma linha para separar o cabeçalho das abas
+# DEFINIÇÃO DAS ABAS (Importante estar antes do uso)
+tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
+
 # ================= DASHBOARD (Aba 0) =================
 with tabs[0]:
     dfv = run_db("SELECT * FROM vendas", select=True)
@@ -96,7 +95,6 @@ with tabs[0]:
 
     st.subheader("💰 Indicadores de Vendas")
     if not dfv.empty:
-        # Tratamento de dados para cálculos
         for col in ["valor_total", "comissao", "valor_unit"]:
             if dfv[col].dtype == object:
                 dfv[col] = dfv[col].astype(str).str.replace('R$', '', regex=False).str.replace('.', '', regex=False).str.replace(',', '.', regex=False).str.strip()
@@ -104,14 +102,13 @@ with tabs[0]:
         
         dfv["qtd"] = pd.to_numeric(dfv["qtd"], errors='coerce').fillna(0)
 
-        # Métricas Principais
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
         c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
         c3.metric("Pedidos", len(dfv))
         c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
-        # Botão Excel
+        # Exportar Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             dfv.to_excel(writer, index=False, sheet_name='Vendas')
@@ -134,12 +131,11 @@ with tabs[0]:
     else:
         st.info("Nenhuma venda registrada.")
 
-    # --- SESSÃO RESTAURADA: RESUMO DE CLIENTES ---
     st.divider()
     st.subheader("👥 Resumo de Clientes")
     if not dfc.empty:
         res1, res2 = st.columns(2)
-        res1.metric("Total de Clientes Cadastrados", len(dfc)) # Número que havia sumido
+        res1.metric("Total de Clientes Cadastrados", len(dfc)) 
         with res2:
             st.write("### Clientes por Categoria")
             st.bar_chart(dfc["categoria"].value_counts())
@@ -150,31 +146,26 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
     clientes_sel = run_db("SELECT razao_social FROM clientes", select=True)
-
     with st.form("venda_form"):
         c1, c2 = st.columns(2)
         emp = c1.text_input("Empresa")
         cli = c2.selectbox("Cliente", clientes_sel["razao_social"].tolist() if not clientes_sel.empty else ["Cadastre um cliente"])
         prod = st.text_input("Produto")
         seg = st.selectbox("Segmento", ["Tecnologia", "Hardware", "Software", "Periféricos", "Redes", "Automação", "Outros"])
-
         q1, q2, q3 = st.columns(3)
         qtd = q1.number_input("Qtd", min_value=1, value=1)
         prc = q2.number_input("Preço Unit", min_value=0.0)
         com = q3.number_input("Comissão %", value=10)
-
         if st.form_submit_button("🚀 Salvar Venda"):
             if emp and cli != "Cadastre um cliente" and prc > 0:
                 total = qtd * prc
                 v_com = total * (com / 100)
-                run_db("""INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
-                          VALUES (?,?,?,?,?,?,?,?,?)""", 
+                run_db("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento) VALUES (?,?,?,?,?,?,?,?,?)", 
                        (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_com, seg))
                 st.success("Venda registrada!")
                 st.rerun()
 
     st.divider()
-    st.subheader("📜 Histórico de Pedidos")
     dfv_edit = run_db("SELECT * FROM vendas", select=True)
     if not dfv_edit.empty:
         new_dfv = st.data_editor(dfv_edit, hide_index=True, use_container_width=True, num_rows="dynamic", key="v_editor")
@@ -182,7 +173,7 @@ with tabs[1]:
             with sqlite3.connect(DB) as conn:
                 conn.execute("DELETE FROM vendas")
                 new_dfv.to_sql("vendas", conn, index=False, if_exists="append")
-            st.success("Sincronizado com sucesso!")
+            st.success("Sincronizado!")
             st.rerun()
 
 # ================= CLIENTES (Aba 2) =================
@@ -197,16 +188,15 @@ with tabs[2]:
                 run_db("INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)", (rs, cj, ct))
                 st.success("Cliente cadastrado!")
                 st.rerun()
-
     st.divider()
     df_c_edit = run_db("SELECT * FROM clientes", select=True)
     if not df_c_edit.empty:
         new_dfc = st.data_editor(df_c_edit, hide_index=True, use_container_width=True, num_rows="dynamic", key="c_editor")
-        if st.button("💾 Sincronizar Alterações de Clientes"):
+        if st.button("💾 Sincronizar Clientes"):
             with sqlite3.connect(DB) as conn:
                 conn.execute("DELETE FROM clientes")
                 new_dfc.to_sql("clientes", conn, index=False, if_exists="append")
-            st.success("Clientes sincronizados!")
+            st.success("Sincronizado!")
             st.rerun()
 
 # ================= USUÁRIOS (Aba 3) =================
@@ -222,11 +212,5 @@ with tabs[3]:
                     st.success(f"Usuário {new_u} criado!")
                 except:
                     st.error("Usuário já existe.")
-
     st.divider()
-    st.subheader("📋 Usuários Cadastrados")
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
-
-
-
-
