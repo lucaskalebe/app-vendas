@@ -3,10 +3,11 @@
 import os, streamlit as st, pandas as pd, sqlite3
 from datetime import datetime
 
-# ================== CONFIGURAÇÕES E BANCO ==================
+# ================== CONFIGURAÇÕES ==================
 st.set_page_config(page_title="Gestão Meira Nobre", layout="wide")
 DB_NAME = "vendas.db"
 
+# ================== BANCO ==================
 def run_db(query, params=(), is_select=False):
     with sqlite3.connect(DB_NAME) as conn:
         if is_select:
@@ -15,7 +16,6 @@ def run_db(query, params=(), is_select=False):
         conn.commit()
 
 def init_db():
-    # Tabela vendas (agora com segmento)
     run_db("""
     CREATE TABLE IF NOT EXISTS vendas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +31,6 @@ def init_db():
     )
     """)
 
-    # Tabela clientes
     run_db("""
     CREATE TABLE IF NOT EXISTS clientes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,19 +42,17 @@ def init_db():
     )
     """)
 
-    # --- MIGRAÇÕES SEGURAS ---
-    # vendas
-    cols_v = run_db("PRAGMA table_info(vendas)", is_select=True)['name'].tolist()
+    # Migrações seguras
+    cols_v = run_db("PRAGMA table_info(vendas)", is_select=True)["name"].tolist()
     if "segmento" not in cols_v:
         run_db("ALTER TABLE vendas ADD COLUMN segmento TEXT DEFAULT 'Não Informado'")
 
-    # clientes
-    cols_c = run_db("PRAGMA table_info(clientes)", is_select=True)['name'].tolist()
+    cols_c = run_db("PRAGMA table_info(clientes)", is_select=True)["name"].tolist()
     for col in ["telefone", "email", "categoria"]:
         if col not in cols_c:
             run_db(f"ALTER TABLE clientes ADD COLUMN {col} TEXT DEFAULT 'Não Informado'")
 
-# --- AUTENTICAÇÃO ---
+# ================== LOGIN ==================
 if "autenticado" not in st.session_state:
     st.title("🔒 Acesso Restrito")
     senha = st.text_input("Digite a senha", type="password")
@@ -71,20 +68,18 @@ init_db()
 
 # ================== INTERFACE ==================
 st.title("📊 Sistema Meira Nobre")
-tabs = st.tabs([
-    "📈 Dashboards",
-    "➕ Nova Venda",
-    "📜 Histórico",
-    "👤 Novo Cliente",
-    "📁 Banco de Clientes"
-])
+tabs = st.tabs(["📈 Dashboards", "➕ Nova Venda", "📜 Histórico", "👤 Novo Cliente", "📁 Banco de Clientes"])
 
-# --- 1. DASHBOARDS ---
+# ================== DASHBOARD ==================
 with tabs[0]:
     dfv = run_db("SELECT * FROM vendas", is_select=True)
     dfc = run_db("SELECT * FROM clientes", is_select=True)
 
     if not dfv.empty:
+        # Blindagem de tipos
+        for col in ["qtd", "valor_unit", "valor_total", "comissao"]:
+            dfv[col] = pd.to_numeric(dfv[col], errors="coerce").fillna(0)
+
         m = st.columns(4)
         m[0].metric("Faturamento", f"R$ {dfv['valor_total'].sum():,.2f}")
         m[1].metric("Comissões", f"R$ {dfv['comissao'].sum():,.2f}")
@@ -93,7 +88,7 @@ with tabs[0]:
 
         st.divider()
         g1, g2 = st.columns(2)
-        g1.subheader("Vendas por Representada")
+        g1.subheader("Vendas por Empresa")
         g1.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
 
         g2.subheader("Vendas por Cliente")
@@ -105,7 +100,7 @@ with tabs[0]:
         c1.write(dfc["categoria"].value_counts())
         c2.bar_chart(dfc.groupby("categoria").size())
 
-# --- 2. NOVA VENDA ---
+# ================== NOVA VENDA ==================
 with tabs[1]:
     with st.container(border=True):
         st.subheader("📝 Registrar Pedido")
@@ -115,43 +110,42 @@ with tabs[1]:
         cli = c2.text_input("Cliente")
 
         prod = st.text_input("Produto")
-        seg = st.selectbox(
-            "Segmento",
-            ["Varejo", "Atacado", "Supermercado", "Food Service", "Hotelaria", "Outros"]
-        )
+        seg = st.selectbox("Segmento", [
+            "Varejo", "Atacado", "Supermercado",
+            "Food Service", "Hotelaria", "Outros"
+        ])
 
         q1, q2, q3 = st.columns(3)
         qtd = q1.number_input("Qtd", min_value=1, value=1)
         prc = q2.number_input("Preço Unit.", min_value=0.0)
         com = q3.number_input("Comissão %", value=10)
 
-        tot = qtd * prc
-        c_val = tot * (com / 100)
+        total = qtd * prc
+        com_val = total * (com / 100)
 
         if st.button("🚀 Salvar Venda", use_container_width=True):
             if emp and cli and prod and prc > 0:
-                run_db(
-                    """INSERT INTO vendas 
-                    (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
-                    VALUES (?,?,?,?,?,?,?,?,?)""",
-                    (
-                        datetime.now().strftime("%d/%m/%Y"),
-                        emp, cli, prod, qtd, prc, tot, c_val, seg
-                    )
-                )
+                run_db("""
+                INSERT INTO vendas
+                (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    datetime.now().strftime("%d/%m/%Y"),
+                    emp, cli, prod, qtd, prc, total, com_val, seg
+                ))
                 st.success("Venda salva com sucesso!")
                 st.rerun()
 
-# --- 3 & 5. HISTÓRICO E BANCO DE CLIENTES ---
+# ================== HISTÓRICO / CLIENTES ==================
 for i, table, label in zip([2, 4], ["vendas", "clientes"], ["Vendas", "Clientes"]):
     with tabs[i]:
         df = run_db(f"SELECT * FROM {table}", is_select=True)
 
         edited = st.data_editor(
             df,
-            use_container_width=True,
             num_rows="dynamic",
             hide_index=True,
+            use_container_width=True,
             key=f"ed_{table}"
         )
 
@@ -163,10 +157,10 @@ for i, table, label in zip([2, 4], ["vendas", "clientes"], ["Vendas", "Clientes"
                 conn.execute(f"DELETE FROM {table}")
                 edited.to_sql(table, conn, if_exists="append", index=False)
 
-            st.success("Dados sincronizados com sucesso!")
+            st.success("Dados sincronizados!")
             st.rerun()
 
-# --- 4. NOVO CLIENTE ---
+# ================== NOVO CLIENTE ==================
 with tabs[3]:
     with st.form("f_cli", clear_on_submit=True):
         st.subheader("👤 Cadastro de Cliente")
@@ -181,5 +175,5 @@ with tabs[3]:
                     "INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)",
                     (rs, cj, cat)
                 )
-                st.success("Cliente cadastrado com sucesso!")
+                st.success("Cliente cadastrado!")
 
