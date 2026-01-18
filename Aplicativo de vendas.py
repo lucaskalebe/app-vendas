@@ -7,6 +7,8 @@ import io
 
 # ================== CONFIGURAÇÕES E ESTILO ==================
 st.set_page_config(page_title="Gestão Meira Nobre", layout="wide")
+
+# Forçando o visual limpo e profissional
 SENHA_MESTRE = os.getenv("SENHA_APP", "1234")
 DB_NAME = "vendas.db"
 
@@ -47,7 +49,7 @@ if check_password():
     init_db()
     st.title("📊 Sistema de Gestão Meira Nobre")
 
-    # Criando as 5 abas
+    # Criando as 5 abas principais
     t_dash, t_venda, t_hist_vendas, t_cad_cliente, t_db_cliente = st.tabs([
         "📈 Dashboard Pro", "➕ Nova Venda", "📜 Histórico Vendas", "👤 Cadastro Cliente", "📁 Banco de Dados Clientes"
     ])
@@ -58,7 +60,6 @@ if check_password():
             df_v = pd.read_sql("SELECT * FROM vendas", conn)
         
         if not df_v.empty:
-            # Métricas principais em destaque
             m1, m2, m3, m4 = st.columns(4)
             m1.metric("Faturamento Total", f"R$ {df_v['valor_total'].sum():,.2f}")
             m2.metric("Total Comissões", f"R$ {df_v['comissao'].sum():,.2f}")
@@ -67,49 +68,56 @@ if check_password():
 
             st.divider()
             
-            # Gráficos em colunas
             g1, g2 = st.columns(2)
             with g1:
-                st.subheader("Vendas por Empresa")
+                st.subheader("Vendas por Representada")
                 st.bar_chart(df_v.groupby("empresa")["valor_total"].sum())
             with g2:
-                st.subheader("Top Clientes (Volume R$)")
-                st.area_chart(df_v.groupby("cliente")["valor_total"].sum())
+                st.subheader("Performance de Comissões")
+                st.bar_chart(df_v.groupby("empresa")["comissao"].sum())
             
-            st.subheader("Evolução de Comissões por Lançamento")
-            st.line_chart(df_v["comissao"])
+            st.subheader("Top Clientes (Volume de Compras)")
+            st.line_chart(df_v.groupby("cliente")["valor_total"].sum())
         else:
-            st.info("Nenhum dado disponível para análise.")
+            st.info("Lance sua primeira venda para ativar o Dashboard.")
 
-    # --- 2. NOVA VENDA (VISUAL CORRIGIDO) ---
+    # --- 2. NOVA VENDA (VISUAL PREMIUM RESTAURADO) ---
     with t_venda:
-        with st.form("f_venda", clear_on_submit=True):
-            st.subheader("📝 Registrar Novo Pedido")
-            emp = st.text_input("Empresa Representada")
-            cli = st.text_input("Cliente / Loja")
-            prod = st.text_input("Descrição do Produto")
-            
-            c1, c2, c3 = st.columns(3)
-            q = c1.number_input("Quantidade", min_value=1, value=1)
-            v = c2.number_input("Preço Unitário (R$)", min_value=0.0, format="%.2f")
-            p = c3.number_input("Sua Comissão %", min_value=0, value=10)
-            
-            total = q * v
-            comis = total * (p / 100)
-            
-            # Devolvendo o visual bonito do resumo
-            st.info(f"### Resumo: Total R$ {total:,.2f} | Comissão R$ {comis:,.2f}")
-            
-            if st.form_submit_button("🚀 Salvar Venda"):
-                if emp and cli and v > 0:
-                    dt = datetime.now().strftime("%d/%m/%Y %H:%M")
-                    with sqlite3.connect(DB_NAME) as conn:
-                        conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
-                                     (dt, emp, cli, prod, q, v, total, comis))
-                    st.success("✅ Venda salva com sucesso!")
-                    st.rerun()
-                else:
-                    st.warning("Preencha os campos obrigatórios (Empresa, Cliente e Valor).")
+        # Usando st.status para criar a borda/caixa de destaque que você gostou
+        with st.status("📝 Registrar Novo Pedido", expanded=True):
+            with st.form("f_venda", clear_on_submit=True):
+                emp = st.text_input("🏢 Empresa Representada")
+                cli = st.text_input("🏬 Cliente / Loja")
+                prod = st.text_input("📦 Descrição do Produto")
+                
+                col1, col2, col3 = st.columns(3)
+                q = col1.number_input("🔢 Quantidade", min_value=1, value=1)
+                v = col2.number_input("💰 Preço Unitário (R$)", min_value=0.0, format="%.2f")
+                p = col3.number_input("📈 Sua Comissão %", min_value=0, value=10)
+                
+                total = q * v
+                comis = total * (p / 100)
+                
+                # Barra de resumo estilizada
+                st.markdown(f"""
+                <div style="background-color:#1e293b; padding:15px; border-radius:10px; border-left: 5px solid #3b82f6; margin: 10px 0;">
+                    <h4 style="margin:0; color:white;">💰 Resumo do Pedido</h4>
+                    <p style="margin:5px 0 0 0; color:#94a3b8; font-size:18px;">
+                        Total: <b>R$ {total:,.2f}</b> | Sua Comissão: <b>R$ {comis:,.2f}</b>
+                    </p>
+                </div>
+                """, unsafe_allow_stdio=True, unsafe_allow_html=True)
+                
+                if st.form_submit_button("🚀 Salvar Venda"):
+                    if emp and cli and v > 0:
+                        dt = datetime.now().strftime("%d/%m/%Y %H:%M")
+                        with sqlite3.connect(DB_NAME) as conn:
+                            conn.execute("INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao) VALUES (?,?,?,?,?,?,?,?)",
+                                         (dt, emp, cli, prod, q, v, total, comis))
+                        st.success("✅ Venda registrada com sucesso!")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Por favor, preencha Empresa, Cliente e Valor Unitário.")
 
     # --- 3. HISTÓRICO VENDAS ---
     with t_hist_vendas:
@@ -119,39 +127,38 @@ if check_password():
         if not df_h.empty:
             buf = io.BytesIO()
             df_h.to_excel(buf, index=False, engine='xlsxwriter')
-            st.download_button("📥 Baixar Relatório Vendas (Excel)", buf.getvalue(), "vendas_meira.xlsx")
+            st.download_button("📥 Baixar Planilha de Vendas", buf.getvalue(), "vendas_meira.xlsx")
 
     # --- 4. CADASTRO CLIENTE ---
     with t_cad_cliente:
-        st.subheader("👤 Novo Cadastro de Cliente")
-        with st.form("f_cli", clear_on_submit=True):
-            col_a, col_b = st.columns(2)
-            cnpj = col_a.text_input("CNPJ")
-            razao = col_b.text_input("Razão Social")
-            fant = st.text_input("Nome Fantasia")
-            
-            col_c, col_d = st.columns(2)
-            tel = col_c.text_input("Telefone / WhatsApp")
-            email = col_d.text_input("E-mail")
-            resp = st.text_input("Nome do Responsável")
-            
-            if st.form_submit_button("💾 Salvar Cliente"):
-                if razao:
-                    with sqlite3.connect(DB_NAME) as conn:
-                        conn.execute("INSERT INTO clientes (cnpj, razao_social, nome_fantasia, telefone, email, responsavel) VALUES (?,?,?,?,?,?)",
-                                     (cnpj, razao, fant, tel, email, resp))
-                    st.success("✅ Cliente cadastrado!")
-                    st.rerun()
-                else:
-                    st.error("O campo Razão Social é obrigatório.")
+        with st.status("👤 Cadastro de Novo Cliente", expanded=True):
+            with st.form("f_cli", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                cnpj = c1.text_input("CNPJ")
+                razao = c2.text_input("Razão Social")
+                fant = st.text_input("Nome Fantasia")
+                
+                c3, c4 = st.columns(2)
+                tel = c3.text_input("Telefone")
+                email = c4.text_input("E-mail")
+                resp = st.text_input("Nome do Responsável")
+                
+                if st.form_submit_button("💾 Salvar Cliente"):
+                    if razao:
+                        with sqlite3.connect(DB_NAME) as conn:
+                            conn.execute("INSERT INTO clientes (cnpj, razao_social, nome_fantasia, telefone, email, responsavel) VALUES (?,?,?,?,?,?)",
+                                         (cnpj, razao, fant, tel, email, resp))
+                        st.success("✅ Cliente cadastrado!")
+                        st.rerun()
+                    else:
+                        st.error("⚠️ Razão Social é obrigatória.")
 
     # --- 5. BANCO DE DADOS CLIENTES ---
     with t_db_cliente:
-        st.subheader("📁 Cadastro Geral de Clientes")
         with sqlite3.connect(DB_NAME) as conn:
             df_c = pd.read_sql("SELECT * FROM clientes ORDER BY razao_social", conn)
         st.dataframe(df_c, use_container_width=True)
         if not df_c.empty:
             buf_c = io.BytesIO()
             df_c.to_excel(buf_c, index=False, engine='xlsxwriter')
-            st.download_button("📥 Baixar Banco de Clientes (Excel)", buf_c.getvalue(), "clientes_meira.xlsx")
+            st.download_button("📥 Exportar Banco de Clientes", buf_c.getvalue(), "clientes_meira.xlsx")
