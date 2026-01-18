@@ -5,7 +5,6 @@ from datetime import datetime
 from io import BytesIO
 
 # ================= 1. CONFIGURAÇÃO (PRIMEIRA LINHA) =================
-LOGOMN_PATH = "logomn.png"
 
 st.set_page_config(
     page_title="Gestão de Vendas | Meira Nobre",
@@ -14,16 +13,6 @@ st.set_page_config(
 )
 
 DB = "vendas.db"
-
-# Sidebar com o Logo
-with st.sidebar:
-    try:
-        st.image(LOGOMN_PATH, use_container_width=True)
-    except:
-        st.warning("⚠️ Envie 'logomn.png' para o GitHub.")
-    st.divider()
-
-
 
 # ================= 2. BANCO DE DADOS =================
 def run_db(query, params=(), select=False):
@@ -215,6 +204,7 @@ with tabs[3]:
                     st.error("Usuário já existe.")
     st.divider()
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
 
 
 
