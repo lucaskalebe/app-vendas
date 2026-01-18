@@ -1,10 +1,13 @@
-
-
 import sqlite3
 import pandas as pd
 import streamlit as st
 from datetime import datetime
 from io import BytesIO
+
+# PDF
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Table, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.pagesizes import A4
 
 # ================= CONFIG =================
 st.set_page_config("Gestão Meira Nobre", layout="wide")
@@ -19,10 +22,21 @@ def run_db(query, params=(), select=False):
         conn.commit()
 
 def init_db():
-    run_db("CREATE TABLE IF NOT EXISTS usuarios (id INTEGER PRIMARY KEY AUTOINCREMENT, usuario TEXT UNIQUE, senha TEXT)")
-    run_db("CREATE TABLE IF NOT EXISTS clientes (id INTEGER PRIMARY KEY AUTOINCREMENT, razao_social TEXT, cnpj TEXT, categoria TEXT)")
-    
-    # Adicionada a coluna 'segmento' para bater com sua imagem
+    run_db("""
+    CREATE TABLE IF NOT EXISTS usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        usuario TEXT UNIQUE,
+        senha TEXT
+    )""")
+
+    run_db("""
+    CREATE TABLE IF NOT EXISTS clientes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        razao_social TEXT,
+        cnpj TEXT,
+        categoria TEXT
+    )""")
+
     run_db("""
     CREATE TABLE IF NOT EXISTS vendas (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -33,22 +47,30 @@ def init_db():
         qtd INTEGER,
         valor_unit REAL,
         valor_total REAL,
-        comissao REAL,
-        segmento TEXT
+        comissao REAL
     )""")
 
     if run_db("SELECT * FROM usuarios", select=True).empty:
-        run_db("INSERT INTO usuarios (usuario, senha) VALUES (?,?)", ("admin", "1234"))
+        run_db(
+            "INSERT INTO usuarios (usuario, senha) VALUES (?,?)",
+            ("admin", "1234")
+        )
 
 init_db()
 
 # ================= LOGIN =================
 if "user" not in st.session_state:
     st.title("🔐 Login")
+
     u = st.text_input("Usuário")
     s = st.text_input("Senha", type="password")
+
     if st.button("Entrar"):
-        df = run_db("SELECT * FROM usuarios WHERE usuario=? AND senha=?", (u, s), select=True)
+        df = run_db(
+            "SELECT * FROM usuarios WHERE usuario=? AND senha=?",
+            (u, s),
+            select=True
+        )
         if not df.empty:
             st.session_state["user"] = u
             st.rerun()
@@ -59,88 +81,235 @@ if "user" not in st.session_state:
 # ================= UI =================
 st.title("📊 Sistema Meira Nobre")
 
-tabs = st.tabs(["📈 Dashboard", "➕ Nova Venda", "👤 Clientes", "👥 Usuários"])
+tabs = st.tabs([
+    "📈 Dashboard",
+    "➕ Nova Venda",
+    "👤 Clientes",
+    "👥 Usuários"
+])
 
 # ================= DASHBOARD =================
 with tabs[0]:
-    # Busca os dados atualizados do banco toda vez que entra na aba
     dfv = run_db("SELECT * FROM vendas", select=True)
 
     if not dfv.empty:
-        # Conversão de tipos para garantir cálculos precisos
-        dfv["valor_total"] = pd.to_numeric(dfv["valor_total"])
-        dfv["comissao"] = pd.to_numeric(dfv["comissao"])
+        dfv[["valor_total", "comissao"]] = dfv[["valor_total", "comissao"]].apply(
+            pd.to_numeric, errors="coerce"
+        ).fillna(0)
 
         c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Faturamento Total", f"R$ {dfv.valor_total.sum():,.2f}")
-        c2.metric("Comissões Totais", f"R$ {dfv.comissao.sum():,.2f}")
-        c3.metric("Total Pedidos", len(dfv))
+        c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
+        c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
+        c3.metric("Pedidos", len(dfv))
         c4.metric("Ticket Médio", f"R$ {dfv.valor_total.mean():,.2f}")
 
         st.divider()
-        col_g1, col_g2 = st.columns(2)
-        
-        with col_g1:
-            st.subheader("Vendas por Empresa")
-            st.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
-        
-        with col_g2:
-            st.subheader("Vendas por Segmento")
-            st.pie_chart(dfv.groupby("segmento")["valor_total"].sum())
 
+        g1, g2 = st.columns(2)
+        g1.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
+        g2.bar_chart(dfv.groupby("cliente")["valor_total"].sum())
+
+        # ===== EXPORT EXCEL =====
+        buffer = BytesIO()
+        dfv.to_excel(buffer, index=False, engine="xlsxwriter")
+        buffer.seek(0)
+
+        e1, e2 = st.columns(2)
+
+        e1.download_button(
+            "📥 Baixar Excel",
+            data=buffer,
+            file_name="vendas.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+
+            with tabs[0]:
+    dfv = run_db("SELECT * FROM vendas", select=True)
+
+    if not dfv.empty:
+        # O 'coerce' evita o erro se houver texto ou valores vazios na coluna
+        dfv["valor_total"] = pd.to_numeric(dfv["valor_total"], errors='coerce').fillna(0)
+        dfv["comissao"] = pd.to_numeric(dfv["comissao"], errors='coerce').fillna(0)
+        
+        # Garante que 'qtd' e 'valor_unit' também sejam números para cálculos
+        dfv["qtd"] = pd.to_numeric(dfv["qtd"], errors='coerce').fillna(0)
+        dfv["valor_unit"] = pd.to_numeric(dfv["valor_unit"], errors='coerce').fillna(0)
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Faturamento", f"R$ {dfv.valor_total.sum():,.2f}")
+        c2.metric("Comissões", f"R$ {dfv.comissao.sum():,.2f}")
+        c3.metric("Pedidos", len(dfv))
+        
+        # Cálculo de Ticket Médio seguro (evita divisão por zero)
+        ticket = dfv.valor_total.mean() if not dfv.empty else 0
+        c4.metric("Ticket Médio", f"R$ {ticket:,.2f}")
+
+        st.divider()
+
+        # Gráficos em tempo real
+        g1, g2 = st.columns(2)
+        with g1:
+            st.write("### Faturamento por Empresa")
+            st.bar_chart(dfv.groupby("empresa")["valor_total"].sum())
+        with g2:
+            st.write("### Faturamento por Segmento")
+            # Adicionado gráfico por segmento conforme a imagem enviada
+            if "segmento" in dfv.columns:
+                st.bar_chart(dfv.groupby("segmento")["valor_total"].sum())
+            else:
+                st.info("Coluna 'segmento' não encontrada para o gráfico.")
+
+        # Tabela completa abaixo dos gráficos
+        st.write("### Detalhes das Vendas")
         st.dataframe(dfv, use_container_width=True, hide_index=True)
     else:
-        st.info("O Dashboard será populado assim que a primeira venda for registrada.")
+        st.info("Nenhuma venda registrada ainda.")
+        )
+
+        # ===== PDF =====
+        def gerar_pdf(df):
+            path = "/tmp/vendas.pdf"
+            doc = SimpleDocTemplate(path, pagesize=A4)
+            styles = getSampleStyleSheet()
+
+            elems = [
+                Paragraph("Relatório de Vendas – Meira Nobre", styles["Title"]),
+                Spacer(1, 12),
+                Table([df.columns.tolist()] + df.values.tolist())
+            ]
+            doc.build(elems)
+            return path
+
+        if e2.button("📄 Gerar PDF", use_container_width=True):
+            pdf = gerar_pdf(dfv)
+            with open(pdf, "rb") as f:
+                e2.download_button(
+                    "⬇️ Baixar PDF",
+                    data=f,
+                    file_name="vendas.pdf",
+                    mime="application/pdf",
+                    use_container_width=True
+                )
+    else:
+        st.info("Nenhuma venda registrada ainda")
 
 # ================= NOVA VENDA =================
 with tabs[1]:
     st.subheader("📝 Registrar Nova Venda")
-    
-    df_clientes = run_db("SELECT razao_social, categoria FROM clientes", select=True)
-    
-    with st.form("form_venda", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        emp = c1.text_input("Empresa (Sua Empresa)")
-        cli = c2.selectbox("Cliente", df_clientes["razao_social"] if not df_clientes.empty else ["Cadastre um cliente primeiro"])
-        
-        prod = st.text_input("Produto")
-        
-        # Segmento baseado na categoria do cliente ou input manual
-        seg = st.selectbox("Segmento", ["Tecnologia", "Hardware", "Software", "Periféricos", "Serviços"])
-        
-        q1, q2, q3 = st.columns(3)
-        qtd = q1.number_input("Quantidade", min_value=1, value=1)
-        prc = q2.number_input("Preço Unitário (R$)", min_value=0.0, format="%.2f")
-        com_per = q3.number_input("Comissão (%)", min_value=0.0, value=10.0)
-        
-        if st.form_submit_button("🚀 Salvar Venda"):
-            if emp and prod and prc > 0:
-                total = qtd * prc
-                v_comissao = total * (com_per / 100)
-                
-                run_db("""
-                    INSERT INTO vendas (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao, segmento)
-                    VALUES (?,?,?,?,?,?,?,?,?)
-                """, (datetime.now().strftime("%d/%m/%Y"), emp, cli, prod, qtd, prc, total, v_comissao, seg))
-                
-                st.success("Venda registrada com sucesso!")
-                st.rerun()
-            else:
-                st.error("Preencha todos os campos corretamente.")
 
-# ================= CLIENTES (Sincronização em Tempo Real) =================
-with tabs[2]:
-    st.subheader("👤 Cadastro de Cliente")
-    with st.form("form_cliente", clear_on_submit=True):
-        rs = st.text_input("Razão Social")
-        cj = st.text_input("CNPJ")
-        cat = st.selectbox("Categoria", ["Varejo", "Atacado", "Supermercado", "Outros"])
-        if st.form_submit_button("Salvar Cliente"):
-            run_db("INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)", (rs, cj, cat))
+    clientes = run_db("SELECT razao_social FROM clientes", select=True)
+
+    c1, c2 = st.columns(2)
+    emp = c1.text_input("Empresa")
+    cli = c2.selectbox(
+        "Cliente",
+        clientes["razao_social"] if not clientes.empty else []
+    )
+
+    prod = st.text_input("Produto")
+
+    q1, q2, q3 = st.columns(3)
+    qtd = q1.number_input("Qtd", min_value=1, value=1)
+    prc = q2.number_input("Preço Unit", min_value=0.0)
+    com = q3.number_input("Comissão %", value=10)
+
+    total = qtd * prc
+    comissao = total * (com / 100)
+
+    if st.button("🚀 Salvar Venda", use_container_width=True):
+        if emp and cli and prc > 0:
+            run_db("""
+                INSERT INTO vendas
+                (data, empresa, cliente, produto, qtd, valor_unit, valor_total, comissao)
+                VALUES (?,?,?,?,?,?,?,?)
+            """, (
+                datetime.now().strftime("%d/%m/%Y"),
+                emp, cli, prod, qtd, prc, total, comissao
+            ))
+            st.success("Venda registrada")
             st.rerun()
+        else:
+            st.warning("Preencha todos os campos obrigatórios")
 
     st.divider()
+    st.subheader("📜 Pedidos Registrados")
+
+    dfv = run_db("SELECT * FROM vendas", select=True)
+
+    if not dfv.empty:
+        edit = st.data_editor(
+            dfv,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="dynamic"
+        )
+
+        if st.button("💾 Sincronizar Pedidos"):
+            with sqlite3.connect(DB) as conn:
+                conn.execute("DELETE FROM vendas")
+                edit.to_sql("vendas", conn, index=False, if_exists="append")
+            st.success("Pedidos atualizados")
+            st.rerun()
+    else:
+        st.info("Nenhuma venda cadastrada")
+
+# ================= CLIENTES =================
+with tabs[2]:
+    st.subheader("👤 Cadastro de Cliente")
+
+    c1, c2 = st.columns(2)
+    rs = c1.text_input("Razão Social")
+    cj = c2.text_input("CNPJ")
+
+    cat = st.selectbox("Categoria", ["Varejo", "Atacado", "Supermercado", "Outros"])
+
+    if st.button("Salvar Cliente"):
+        run_db(
+            "INSERT INTO clientes (razao_social, cnpj, categoria) VALUES (?,?,?)",
+            (rs, cj, cat)
+        )
+        st.success("Cliente cadastrado")
+        st.rerun()
+
+    st.divider()
+    st.subheader("📁 Banco de Clientes")
+
     dfc = run_db("SELECT * FROM clientes", select=True)
+
     if not dfc.empty:
-        st.write("### Banco de Clientes")
-        st.dataframe(dfc, use_container_width=True, hide_index=True)
+        edit = st.data_editor(
+            dfc,
+            hide_index=True,
+            use_container_width=True,
+            num_rows="dynamic"
+        )
+
+        if st.button("💾 Sincronizar Clientes"):
+            with sqlite3.connect(DB) as conn:
+                conn.execute("DELETE FROM clientes")
+                edit.to_sql("clientes", conn, index=False, if_exists="append")
+            st.success("Clientes atualizados")
+            st.rerun()
+    else:
+        st.info("Nenhum cliente cadastrado")
+
+# ================= USUÁRIOS =================
+with tabs[3]:
+    st.subheader("➕ Novo Usuário")
+
+    u = st.text_input("Usuário novo")
+    s = st.text_input("Senha nova", type="password")
+
+    if st.button("Criar Usuário"):
+        try:
+            run_db(
+                "INSERT INTO usuarios (usuario, senha) VALUES (?,?)",
+                (u, s)
+            )
+            st.success("Usuário criado")
+        except:
+            st.error("Usuário já existe")
+
+    st.divider()
+    st.subheader("📋 Usuários Cadastrados")
+    st.dataframe(run_db("SELECT usuario FROM usuarios", select=True))
