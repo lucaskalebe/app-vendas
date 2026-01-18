@@ -68,18 +68,18 @@ with col_logo:
         st.write("📊")
 
 with col_titulo:
-    # CSS para centralizar o texto verticalmente com a imagem
     st.markdown(
         """
         <style>
             .alinhado {
                 display: flex;
                 align-items: center;
-                height: 200px; /* Ajuste se mudar o tamanho da imagem */
+                height: 100%;
             }
         </style>
+
         <div class="alinhado">
-            <h1 style='margin: 0;'>Gestão de Vendas | Meira Nobre</h1>
+            <h1 style="margin: 0;">Gestão de Vendas | Meira Nobre</h1>
         </div>
         """,
         unsafe_allow_html=True
@@ -214,3 +214,4 @@ with tabs[3]:
                     st.error("Usuário já existe.")
     st.divider()
     st.dataframe(run_db("SELECT usuario FROM usuarios", select=True), use_container_width=True)
+
